@@ -1009,7 +1009,24 @@ function App(){
   const[mTarj,setMTarj]=useState(false);const[eTarj,setETarj]=useState(null);
   const[mFijo,setMFijo]=useState(false);const[eFijo,setEFijo]=useState(null);
 
-  useEffect(()=>{const u=auth.onAuthStateChanged(u=>setUser(u||null));return u;},[]);
+  useEffect(()=>{
+    const u=auth.onAuthStateChanged(async u=>{
+      if(u){
+        // Verificar licencia activa
+        try {
+          const doc = await db.collection('licencias_control').doc(u.email).get();
+          if(!doc.exists || doc.data().estado === 'inactivo'){
+            auth.signOut();
+            setUser(null);
+            alert('Tu cuenta no está activada. Contactá a Emma Soluciones Digitales.');
+            return;
+          }
+        } catch(e) { /* si falla la verificacion, dejar pasar */ }
+      }
+      setUser(u||null);
+    });
+    return u;
+  },[]);
   const uid=user?.uid;
   const integracion=useIntegracion(uid);
   const[movs,setMovs,rM]=useFirestore(uid,'movimientos',[]);
