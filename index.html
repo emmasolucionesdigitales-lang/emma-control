@@ -51,10 +51,10 @@
 </head>
 <body><div id="root"></div>
 <script>
-  const firebaseConfig={apiKey:"AIzaSyB8BB_xFyXCobGHoMj_dFOTA1n76FROfS4",authDomain:"emma-soluciones.firebaseapp.com",projectId:"emma-soluciones",storageBucket:"emma-soluciones.firebasestorage.app",messagingSenderId:"611618583352",appId:"1:611618583352:web:90f0f3a0248bc016c087cd"};
+  const firebaseConfig={apiKey:"AIzaSyBDz-IH9yrOBxkH10rpvDxZ12tyxeG_wSY",authDomain:"sistema-de-gestion-diario.firebaseapp.com",projectId:"sistema-de-gestion-diario",storageBucket:"sistema-de-gestion-diario.firebasestorage.app",messagingSenderId:"708942111150",appId:"1:708942111150:web:f568d5fad93d7e7eb1683f"};
   firebase.initializeApp(firebaseConfig);
   const auth=firebase.auth();
-  const db=firebase.firestore();
+  const db=firebase.firestore(); window.db=db;
   // Función para leer datos enviados desde La Catalina
   window.leerIntegracionLC = function(token, cb){
     if(!token||!db)return;
@@ -286,7 +286,22 @@ function AuthScreen(){
   const[err,setErr]=useState('');const[ok,setOk]=useState('');const[carg,setCarg]=useState(false);
   const errMsg=e=>{const c=e.code;if(c==='auth/invalid-email')return'Email inválido';if(c==='auth/user-not-found'||c==='auth/invalid-credential')return'Email o contraseña incorrectos';if(c==='auth/wrong-password')return'Contraseña incorrecta';if(c==='auth/email-already-in-use')return'Ya existe una cuenta con ese email';if(c==='auth/weak-password')return'La contraseña debe tener al menos 6 caracteres';return'Error: '+e.message;};
   const login=async()=>{setErr('');setCarg(true);try{await auth.signInWithEmailAndPassword(email,pass);}catch(e){setErr(errMsg(e));}setCarg(false);};
-  const registrar=async()=>{if(!nombre.trim())return setErr('Ingresá tu nombre');setErr('');setCarg(true);try{const r=await auth.createUserWithEmailAndPassword(email,pass);await r.user.updateProfile({displayName:nombre.trim()});}catch(e){setErr(errMsg(e));}setCarg(false);};
+  const registrar=async()=>{
+    if(!nombre.trim())return setErr('Ingresá tu nombre');
+    setErr('');setCarg(true);
+    try{
+      const r=await auth.createUserWithEmailAndPassword(email,pass);
+      await r.user.updateProfile({displayName:nombre.trim()});
+      // Crear ficha en Firestore con estado pendiente (admin deberá activarla)
+      await db.collection('licencias').doc(r.user.uid).set({
+        uid:r.user.uid,nombre:nombre.trim(),email:email.trim().toLowerCase(),
+        estado:'pendiente',plan:'demo',vencimiento:null,
+        fechaAlta:new Date().toISOString()
+      });
+      setOk('✅ Cuenta creada. Tu acceso será activado en breve por el administrador.');
+    }catch(e){setErr(errMsg(e));}
+    setCarg(false);
+  };
   const recuperar=async()=>{if(!email.trim())return setErr('Ingresá tu email');setErr('');setCarg(true);try{await auth.sendPasswordResetEmail(email);setOk('✅ Email enviado. Revisá tu bandeja.');}catch(e){setErr(errMsg(e));}setCarg(false);};
 
   return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px',overflowY:'auto',background:'var(--bg)'}}>
@@ -952,23 +967,23 @@ function Config({user,onCerrarSesion,dark,setDark,integracion,onSyncLC,onImporta
         <button style={{...S.btn,width:'100%',padding:'11px',fontSize:14,marginBottom:8,textAlign:'center'}} onClick={cambiarPass}>🔑 Cambiar contraseña</button>
         <button style={{...S.btn,width:'100%',padding:'11px',fontSize:14,color:'#dc2626',border:'0.5px solid #fecaca',textAlign:'center'}} onClick={onCerrarSesion}>🚪 Cerrar sesión</button>
       </div>
-      {/* INTEGRACIÓN LA CATALINA */}
+      {/* SINCRONIZACIÓN CON APP DE REPARTO */}
       <div style={{...S.card,marginBottom:12}}>
-        <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>🔗 Vincular con La Catalina</div>
-        {!integracion.token
+        <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>🔗 Vincular con App de Reparto</div>
+        {!sincToken
           ?<>
-            <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6,marginBottom:12}}>Generá un código único y pegalo en La Catalina → Config → "Código Emma Control". Los ingresos y gastos se enviarán automáticamente al cerrar el día.</div>
-            <button style={S.btnP} onClick={integracion.generarToken}>Generar código</button>
+            <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6,marginBottom:12}}>Generá un código único y pegalo en tu App de Reparto → Config → "Código Emma Control". Los totales del día se enviarán automáticamente.</div>
+            <button style={S.btnP} onClick={generarSincToken}>Generar código de sincronización</button>
           </>
           :<>
-            <div style={{fontSize:11,color:'var(--t2)',marginBottom:6,fontWeight:600}}>Tu código de integración</div>
-            <div style={{background:'var(--pdim)',border:'1.5px solid var(--pborder)',borderRadius:10,padding:'12px 14px',fontFamily:'monospace',fontSize:22,fontWeight:700,color:'var(--primary)',letterSpacing:'0.2em',textAlign:'center',marginBottom:8}}>{integracion.token}</div>
-            <div style={{fontSize:11,color:'var(--t3)',textAlign:'center',marginBottom:12}}>Copiá este código en La Catalina → Config → Vincular Emma Control</div>
-            <button style={{...S.btnP,marginBottom:8}} onClick={onSyncLC} disabled={integracion.importando}>
-              {integracion.importando?<span className="spin">⏳</span>:'📥 Importar ahora desde La Catalina'}
+            <div style={{fontSize:11,color:'var(--t2)',marginBottom:6,fontWeight:600}}>Tu código de sincronización</div>
+            <div style={{background:'var(--pdim)',border:'1.5px solid var(--pborder)',borderRadius:10,padding:'12px 14px',fontFamily:'monospace',fontSize:22,fontWeight:700,color:'var(--primary)',letterSpacing:'0.2em',textAlign:'center',marginBottom:8}}>{sincToken}</div>
+            <div style={{fontSize:11,color:'var(--t3)',textAlign:'center',marginBottom:12}}>Pegá este código en la App de Reparto → Config → Vincular Emma Control</div>
+            <button style={{...S.btnP,marginBottom:8}} onClick={importarDesdeReparto} disabled={sincImportando}>
+              {sincImportando?<span className="spin">⏳</span>:'📥 Importar movimientos del día'}
             </button>
-            {integracion.ultimaSync&&<div style={{fontSize:11,color:'var(--t3)',textAlign:'center',marginBottom:8}}>Última sincronización: {integracion.ultimaSync}</div>}
-            <button onClick={()=>{if(window.confirm('¿Desvincular? Perdés el código actual.')){{integracion.generarToken&&localStorage.removeItem('ec_token');window.location.reload();}}}} style={{...S.btn,width:'100%',padding:'9px',fontSize:12,color:'#dc2626',border:'0.5px solid #fecaca',textAlign:'center'}}>🗑️ Desvincular</button>
+            {sincUltimaSync&&<div style={{fontSize:11,color:'var(--t3)',textAlign:'center',marginBottom:8}}>Última sincronización: {sincUltimaSync}</div>}
+            <button onClick={()=>{if(window.confirm('¿Desvincular? Perdés el código actual.'))resetSincToken();}} style={{...S.btn,width:'100%',padding:'9px',fontSize:12,color:'#dc2626',border:'0.5px solid #fecaca',textAlign:'center'}}>🗑️ Desvincular</button>
           </>}
       </div>
       {/* TEMA */}
@@ -998,6 +1013,19 @@ function Config({user,onCerrarSesion,dark,setDark,integracion,onSyncLC,onImporta
   </div>;
 }
 
+/* ══ PANTALLA CUENTA PENDIENTE ══ */
+function PendienteScreen(){
+  return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px',background:'var(--bg)'}}>
+    <div style={{textAlign:'center',maxWidth:320}}>
+      <div style={{fontSize:56,marginBottom:16}}>⏳</div>
+      <div style={{fontFamily:'var(--fh)',fontSize:22,fontWeight:800,color:'var(--text)',marginBottom:8}}>Cuenta pendiente</div>
+      <div style={{fontSize:14,color:'var(--t2)',lineHeight:1.6,marginBottom:24}}>Tu cuenta fue creada correctamente. El administrador debe activarla antes de que puedas ingresar.</div>
+      <div style={{background:'var(--pdim)',border:'1px solid var(--pborder)',borderRadius:12,padding:'14px 16px',fontSize:13,color:'var(--primary)',marginBottom:24}}>📱 Contactá a Emma Soluciones Digitales para activar tu acceso.</div>
+      <button onClick={()=>auth.signOut()} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:10,padding:'11px 24px',fontSize:14,fontWeight:600,color:'var(--t2)',cursor:'pointer'}}>Cerrar sesión</button>
+    </div>
+  </div>;
+}
+
 /* ══ APP PRINCIPAL ══ */
 function App(){
   const[user,setUser]=useState(undefined);
@@ -1012,15 +1040,23 @@ function App(){
   useEffect(()=>{
     const u=auth.onAuthStateChanged(async u=>{
       if(u){
-        // Verificar licencia activa
         try {
-          const doc = await db.collection('licencias_control').doc(u.email).get();
-          if(!doc.exists || doc.data().estado === 'inactivo'){
-            auth.signOut();
-            setUser(null);
-            alert('Tu cuenta no está activada. Contactá a Emma Soluciones Digitales.');
-            return;
+          const doc = await db.collection('licencias').doc(u.uid).get();
+          if(doc.exists){
+            const estado=doc.data().estado;
+            if(estado==='inactivo'){
+              auth.signOut();
+              setUser(null);
+              alert('Tu cuenta está suspendida. Contactá a Emma Soluciones Digitales.');
+              return;
+            }
+            if(estado==='pendiente'){
+              setUser('pendiente');
+              return;
+            }
+            // estado === 'activo' → continúa normalmente
           }
+          // Si no existe el doc (usuarios antiguos) → dejar pasar
         } catch(e) { /* si falla la verificacion, dejar pasar */ }
       }
       setUser(u||null);
@@ -1029,6 +1065,42 @@ function App(){
   },[]);
   const uid=user?.uid;
   const integracion=useIntegracion(uid);
+  // Sincronización con App de Reparto
+  const [sincToken, setSincToken] = React.useState(()=>localStorage.getItem('ec_sinc_token')||'');
+  const [sincImportando, setSincImportando] = React.useState(false);
+  const [sincUltimaSync, setSincUltimaSync] = React.useState(()=>localStorage.getItem('ec_sinc_ultima')||'');
+  const generarSincToken = ()=>{
+    const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const t=Array.from({length:8},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+    setSincToken(t);
+    localStorage.setItem('ec_sinc_token',t);
+  };
+  const resetSincToken = ()=>{
+    setSincToken('');
+    localStorage.removeItem('ec_sinc_token');
+    localStorage.removeItem('ec_sinc_ultima');
+  };
+  const importarDesdeReparto = async ()=>{
+    if(!sincToken||!window.db) return;
+    setSincImportando(true);
+    try {
+      const snap = await window.db.collection('sinc_reparto').doc(sincToken).collection('movimientos').get();
+      if(snap.empty){ alert('No hay datos nuevos de la App de Reparto'); setSincImportando(false); return; }
+      let nuevos=0;
+      snap.forEach(doc=>{
+        const d=doc.data();
+        if(!movs.find(m=>m.id===d.id)){
+          setMovs(prev=>[...prev,{...d,origen:'reparto'}]);
+          nuevos++;
+        }
+      });
+      const ahora=new Date().toLocaleString('es-AR');
+      setSincUltimaSync(ahora);
+      localStorage.setItem('ec_sinc_ultima',ahora);
+      alert(nuevos>0?'✅ '+nuevos+' movimiento(s) importado(s) de la App de Reparto':'No hay movimientos nuevos');
+    } catch(e){ alert('Error al importar: '+e.message); }
+    setSincImportando(false);
+  };
   const[movs,setMovs,rM]=useFirestore(uid,'movimientos',[]);
   const[tarj,setTarj,rT]=useFirestore(uid,'tarjetas',[]);
   const[fijos,setFijos,rF]=useFirestore(uid,'gastosFijos',FDEF);
@@ -1091,6 +1163,7 @@ function App(){
     <div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Cargando...</div>
   </div>;
   if(!user)return<AuthScreen/>;
+  if(user==='pendiente')return<PendienteScreen/>;
   if(!(rM&&rT&&rF&&rP))return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}>
     <div className="spin" style={{fontSize:32}}>☁️</div>
     <div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Sincronizando datos...</div>
