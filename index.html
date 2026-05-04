@@ -411,7 +411,52 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial}){
   </Modal>;
 }
 
-/* ══ MODAL TARJETA ══ */
+/* ══ MODAL EDITAR MOVIMIENTO ══ */
+function ModalEditMov({mov,tarjetas,onGuardar,onClose}){
+  const esCuota=mov.tipo==='cuota';
+  const[tipo,setTipo]=useState(esCuota?'gasto':mov.tipo);
+  const[ent,setEnt]=useState(mov.ent||'negocio');
+  const[desc,setDesc]=useState(mov.desc||'');
+  const[monto,setMonto]=useState(esCuota?(mov.montoTotal||''):(mov.monto||''));
+  const[fecha,setFecha]=useState(mov.fecha||hoy());
+  const[metodo,setMetodo]=useState(mov.metodo||'efectivo');
+  const[cat,setCat]=useState(mov.cat||'');
+  const cats=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
+
+  const guardar=()=>{
+    if(!desc.trim())return alert('Escribí una descripción');
+    if(!esCuota&&(!monto||Number(monto)<=0))return alert('Ingresá un monto válido');
+    if(esCuota){
+      onGuardar({...mov,desc,fecha,cat,ent});
+    }else{
+      onGuardar({...mov,tipo,ent,desc,monto:Number(monto),fecha,metodo,cat});
+    }
+    onClose();
+  };
+
+  return<Modal onClose={onClose} title="✏️ Editar movimiento">
+    {esCuota&&<div style={{background:'#fffbeb',border:'0.5px solid #fde68a',borderRadius:10,padding:'10px 14px',fontSize:12,color:'#92400e',marginBottom:14}}>💳 Es una compra en cuotas. Solo podés editar la descripción, fecha y categoría.</div>}
+    {!esCuota&&<>
+      <div style={{marginBottom:12}}><Toggle opts={[['gasto','💸 Gasto'],['ingreso','💰 Ingreso']]} val={tipo} onChange={setTipo} cm={{gasto:'var(--danger)',ingreso:'var(--success)'}}/></div>
+      <div style={{marginBottom:12}}><Toggle opts={[['personal','👤 Personal'],['negocio','🏭 Negocio']]} val={ent} onChange={setEnt} cm={{personal:'var(--pers)',negocio:'var(--neg)'}}/></div>
+    </>}
+    <label style={S.lbl}>Descripción</label>
+    <input style={{...S.inp,marginBottom:12}} value={desc} onChange={e=>setDesc(e.target.value)}/>
+    {!esCuota&&<><label style={S.lbl}>Monto $</label>
+    <input style={{...S.inpR,marginBottom:12}} type="number" inputMode="numeric" value={monto} onChange={e=>setMonto(e.target.value)}/></>}
+    <label style={S.lbl}>Fecha</label>
+    <input style={{...S.inp,marginBottom:12}} type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/>
+    <label style={S.lbl}>Categoría</label>
+    <select style={{...S.inp,marginBottom:12}} value={cat} onChange={e=>setCat(e.target.value)}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+    {!esCuota&&<><label style={S.lbl}>Método de pago</label>
+    <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
+      {['efectivo','débito','tarjeta','transferencia'].map(mt=><button key={mt} onClick={()=>setMetodo(mt)} style={{padding:'7px 13px',borderRadius:20,border:`1px solid ${metodo===mt?'var(--primary)':'var(--border)'}`,background:metodo===mt?'var(--pdim)':'transparent',color:metodo===mt?'var(--primary)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{mt}</button>)}
+    </div></>}
+    <button style={S.btnP} onClick={guardar}>Guardar cambios</button>
+  </Modal>;
+}
+
+
 function ModalTarj({tarjeta,onGuardar,onClose}){
   const[d,sd]=useState({nombre:tarjeta?.nombre||'',banco:tarjeta?.banco||'',ultimos4:tarjeta?.ultimos4||'',color:tarjeta?.color||CCOLORS[0],diaCierre:tarjeta?.diaCierre||'',diaVenc:tarjeta?.diaVenc||'',limite:tarjeta?.limite||''});
   const set=(k,v)=>sd(p=>({...p,[k]:v}));
@@ -547,7 +592,7 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
 }
 
 /* ══ DETALLE INGRESOS ══ */
-function DetalleIngresos({movs,onNuevo,onVolver}){
+function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
   const mesK=mk(hoy());
   const[mes,setMes]=useState(mesK);
   const meses=useMemo(()=>{const s=new Set(movs.filter(m=>m.tipo==='ingreso').map(m=>mk(m.fecha)));s.add(mesK);return[...s].sort().reverse();},[movs]);
@@ -608,7 +653,11 @@ function DetalleIngresos({movs,onNuevo,onVolver}){
               {m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}
             </div>
           </div>
-          <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:'#16a34a',flexShrink:0,letterSpacing:'-0.01em'}}>+{fmt(m.monto)}</div>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:'#16a34a',letterSpacing:'-0.01em'}}>+{fmt(m.monto)}</div>
+            <button onClick={()=>onEditar(m)} style={{background:'var(--pdim)',border:'none',color:'var(--primary)',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>✏️</button>
+            <button onClick={()=>onEliminar(m.id)} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>🗑️</button>
+          </div>
         </div>)}
       </div>)}
     </div>
@@ -616,7 +665,7 @@ function DetalleIngresos({movs,onNuevo,onVolver}){
   </div>;
 }
 /* ══ DETALLE EGRESOS ══ */
-function DetalleEgresos({movs,tarjetas,onNuevo,onVolver}){
+function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
   const mesK=mk(hoy());
   const[mes,setMes]=useState(mesK);
   const[filtEnt,setFiltEnt]=useState('todos');
@@ -692,7 +741,11 @@ function DetalleEgresos({movs,tarjetas,onNuevo,onVolver}){
               {m._cuota?<span style={{fontSize:10,color:'#d97706',fontWeight:600}}>{m._label}</span>:<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}
             </div>
           </div>
-          <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m._cuota?'#d97706':'#dc2626',flexShrink:0,letterSpacing:'-0.01em'}}>-{fmt(m.monto)}</div>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m._cuota?'#d97706':'#dc2626',letterSpacing:'-0.01em'}}>-{fmt(m.monto)}</div>
+            {!m._cuota&&<button onClick={()=>onEditar(m)} style={{background:'var(--pdim)',border:'none',color:'var(--primary)',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>✏️</button>}
+            <button onClick={()=>onEliminar(m._cuota?m.id:m.id)} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>🗑️</button>
+          </div>
         </div>)}
       </div>)}
     </div>
@@ -701,7 +754,7 @@ function DetalleEgresos({movs,tarjetas,onNuevo,onVolver}){
 }
 
 /* ══ MOVIMIENTOS ══ */
-function Movimientos({movs,onNuevo,onEliminar}){
+function Movimientos({movs,onNuevo,onEliminar,onEditar}){
   const[filtT,setFiltT]=useState('todos');const[filtE,setFiltE]=useState('todos');const[mes,setMes]=useState(mk(hoy()));
   const meses=useMemo(()=>{const s=new Set(movs.map(m=>mk(m.fecha)));s.add(mk(hoy()));return[...s].sort().reverse();},[movs]);
   const lista=useMemo(()=>movs.filter(m=>mk(m.fecha)===mes&&(filtT==='todos'||m.tipo===filtT)&&(filtE==='todos'||m.ent===filtE)).sort((a,b)=>b.fecha.localeCompare(a.fecha)),[movs,mes,filtT,filtE]);
@@ -761,9 +814,10 @@ function Movimientos({movs,onNuevo,onEliminar}){
             <div style={{fontSize:14,fontWeight:500,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div>
             <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
             <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m.tipo==='ingreso'?'#16a34a':'#dc2626',letterSpacing:'-0.01em'}}>{m.tipo==='ingreso'?'+':'-'}{fmt(m.monto)}</div>
-            <button onClick={()=>onEliminar(m.id)} style={{background:'none',border:'none',color:'var(--t3)',fontSize:18,cursor:'pointer',padding:'2px 4px'}}>✕</button>
+            <button onClick={()=>onEditar(m)} style={{background:'var(--pdim)',border:'none',color:'var(--primary)',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>✏️</button>
+            <button onClick={()=>onEliminar(m.id)} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:14,cursor:'pointer',padding:'4px 7px',borderRadius:8}}>🗑️</button>
           </div>
         </div>)}
       </div>)}
@@ -1036,6 +1090,7 @@ function App(){
   const[mMov,setMMov]=useState(false);const[tipoMov,setTipoMov]=useState(null);
   const[mTarj,setMTarj]=useState(false);const[eTarj,setETarj]=useState(null);
   const[mFijo,setMFijo]=useState(false);const[eFijo,setEFijo]=useState(null);
+  const[mEditMov,setMEditMov]=useState(false);const[movEdit,setMovEdit]=useState(null);
 
   useEffect(()=>{
     const u=auth.onAuthStateChanged(async u=>{
@@ -1107,6 +1162,7 @@ function App(){
   const[pagos,setPagos,rP]=useFirestore(uid,'pagosFijos',[]);
 
   const agrMov=m=>setMovs(p=>[...p,m]);
+  const actualizarMov=m2=>setMovs(p=>p.map(m=>m.id===m2.id?m2:m));
   const delMov=id=>{if(window.confirm('¿Eliminar este movimiento?'))setMovs(p=>p.filter(m=>m.id!==id));};
   const saveTarj=t=>setTarj(p=>p.find(x=>x.id===t.id)?p.map(x=>x.id===t.id?t:x):[...p,t]);
   const delTarj=id=>{if(window.confirm('¿Eliminar tarjeta?'))setTarj(p=>p.filter(t=>t.id!==id));};
@@ -1171,9 +1227,9 @@ function App(){
 
   const render=()=>{switch(pant){
     case'dashboard':return<Dashboard movs={movs} fijos={fijos} pagos={pagos} tarjetas={tarj} onNuevo={()=>abrirMov()} onVerIngresos={()=>setPant('ingresos')} onVerEgresos={()=>setPant('egresos')} onVerArqueo={()=>setPant('arqueo')}/>;
-    case'ingresos':return<DetalleIngresos movs={movs} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')}/>;
-    case'egresos':return<DetalleEgresos movs={movs} tarjetas={tarj} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')}/>;
-    case'movimientos':return<Movimientos movs={movs} onNuevo={()=>abrirMov()} onEliminar={delMov}/>;
+    case'ingresos':return<DetalleIngresos movs={movs} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')} onEditar={m=>{setMovEdit(m);setMEditMov(true);}} onEliminar={delMov}/>;
+    case'egresos':return<DetalleEgresos movs={movs} tarjetas={tarj} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')} onEditar={m=>{setMovEdit(m);setMEditMov(true);}} onEliminar={delMov}/>;
+    case'movimientos':return<Movimientos movs={movs} onNuevo={()=>abrirMov()} onEliminar={delMov} onEditar={m=>{setMovEdit(m);setMEditMov(true);}}/>;
     case'tarjetas':return<Tarjetas tarjetas={tarj} movs={movs} onAgregar={()=>{setETarj(null);setMTarj(true);}} onEditar={t=>{setETarj(t);setMTarj(true);}} onEliminar={delTarj}/>;
     case'fijos':return<GastosFijos fijos={fijos} pagos={pagos} setPagos={setPagos} onAgregar={()=>{setEFijo(null);setMFijo(true);}} onEditar={f=>{setEFijo(f);setMFijo(true);}} onEliminar={delFijo}/>;
     case'arqueo':return<Arqueo movs={movs} onVolver={()=>setPant('dashboard')}/>;
@@ -1186,6 +1242,7 @@ function App(){
     {navPant.includes(pant)&&<Nav act={pant} go={setPant}/>}
     {navPant.includes(pant)&&<BtnEscala esc={esc} setEsc={setEsc}/>}
     {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} onClose={()=>{setMMov(false);setTipoMov(null);}}/>}
+    {mEditMov&&movEdit&&<ModalEditMov mov={movEdit} tarjetas={tarj} onGuardar={actualizarMov} onClose={()=>{setMEditMov(false);setMovEdit(null);}}/>}
     {mTarj&&<ModalTarj tarjeta={eTarj} onGuardar={saveTarj} onClose={()=>{setMTarj(false);setETarj(null);}}/>}
     {mFijo&&<ModalFijo fijo={eFijo} onGuardar={saveFijo} onClose={()=>{setMFijo(false);setEFijo(null);}}/>}
   </>;
