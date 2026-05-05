@@ -55,20 +55,11 @@
   firebase.initializeApp(firebaseConfig);
   const auth=firebase.auth();
   const db=firebase.firestore(); window.db=db;
-  window.leerIntegracionLC = function(token, cb){
-    if(!token||!db)return;
-    db.collection('integraciones').doc(token).collection('movs')
-      .get().then(function(snap){
-        var movs=[];
-        snap.forEach(function(d){movs.push(d.data());});
-        cb(movs);
-      }).catch(function(e){cb([]);});
-  };
+  window.leerIntegracionLC=function(token,cb){if(!token||!db)return;db.collection('integraciones').doc(token).collection('movs').get().then(function(snap){var movs=[];snap.forEach(function(d){movs.push(d.data());});cb(movs);}).catch(function(e){cb([]);});};
 </script>
 <script type="text/babel">
 const {useState,useEffect,useMemo,useCallback,useRef}=React;
 const fmt=n=>'$'+(Number(n)||0).toLocaleString('es-AR');
-const fmtK=n=>{const a=Math.abs(n);if(a>=1e6)return(n<0?'-':'')+'$'+(Math.abs(n)/1e6).toFixed(1)+'M';if(a>=1000)return(n<0?'-':'')+'$'+Math.round(Math.abs(n)/1000)+'k';return fmt(n);};
 const hoy=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const mk=f=>f?f.slice(0,7):'';
 const MESES_L=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -94,14 +85,11 @@ function useFirestore(uid,col,init){
 const ESCALAS={S:12,M:14,L:16,XL:19};
 function useEscala(){
   const[esc,setEsc]=useState(()=>localStorage.getItem('ec_escala')||'M');
-  useEffect(()=>{
-    document.documentElement.style.fontSize=ESCALAS[esc]+'px';
-    localStorage.setItem('ec_escala',esc);
-  },[esc]);
+  useEffect(()=>{document.documentElement.style.fontSize=ESCALAS[esc]+'px';localStorage.setItem('ec_escala',esc);},[esc]);
   return[esc,setEsc];
 }
 
-/* ══ CÓDIGO DE INTEGRACIÓN ══ */
+/* ══ INTEGRACIÓN LC ══ */
 function genToken(){return Array.from({length:8},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('');}
 function useIntegracion(uid){
   const[token,setToken]=useState(()=>localStorage.getItem('ec_token')||'');
@@ -119,12 +107,8 @@ function useIntegracion(uid){
       setMovs(prev=>{
         const ids=new Set(prev.map(m=>m.id));
         const claves=new Set(prev.map(m=>`${m.fecha}|${(m.desc||'').trim().toLowerCase()}|${m.monto}|${m.tipo}`));
-        const nuevos=movs.filter(m=>{
-          if(m.id&&ids.has(m.id))return false;
-          const clave=`${m.fecha}|${(m.desc||'').trim().toLowerCase()}|${m.monto}|${m.tipo}`;
-          return!claves.has(clave);
-        });
-        if(nuevos.length===0){alert('Todos los datos ya estaban importados (sin duplicados)');return prev;}
+        const nuevos=movs.filter(m=>{if(m.id&&ids.has(m.id))return false;const clave=`${m.fecha}|${(m.desc||'').trim().toLowerCase()}|${m.monto}|${m.tipo}`;return!claves.has(clave);});
+        if(nuevos.length===0){alert('Todos los datos ya estaban importados');return prev;}
         alert('✅ Se importaron '+nuevos.length+' registro(s) desde La Catalina');
         return[...prev,...nuevos];
       });
@@ -133,13 +117,10 @@ function useIntegracion(uid){
   return{token,generarToken,importarDesdeLC,importando,ultimaSync};
 }
 
-/* ══ TEMA CLARO/OSCURO ══ */
+/* ══ TEMA ══ */
 function useTema(){
   const[dark,setDark]=useState(()=>localStorage.getItem('ec_tema')==='dark');
-  useEffect(()=>{
-    document.documentElement.classList.toggle('dark',dark);
-    localStorage.setItem('ec_tema',dark?'dark':'light');
-  },[dark]);
+  useEffect(()=>{document.documentElement.classList.toggle('dark',dark);localStorage.setItem('ec_tema',dark?'dark':'light');},[dark]);
   return[dark,setDark];
 }
 
@@ -154,7 +135,6 @@ const S={
   card2:{background:'var(--card2)',borderRadius:12,padding:'10px 12px',border:'0.5px solid var(--border)'},
   btn:{borderRadius:10,padding:'9px 14px',fontSize:13,fontWeight:600,cursor:'pointer',background:'var(--card2)',color:'var(--t2)',border:'0.5px solid var(--border)'},
   btnP:{background:'var(--primary)',color:'#fff',borderRadius:10,padding:'13px',fontSize:15,fontWeight:700,width:'100%',cursor:'pointer',border:'none'},
-  btnD:{background:'var(--danger)',color:'#fff',borderRadius:10,padding:'13px',fontSize:15,fontWeight:700,width:'100%',cursor:'pointer',border:'none'},
   lbl:{fontSize:11,color:'var(--t2)',marginBottom:4,display:'block',fontWeight:700,letterSpacing:'0.05em',textTransform:'uppercase'},
   inp:{background:'var(--card2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',fontSize:15,color:'var(--text)',width:'100%',outline:'none'},
   inpR:{background:'var(--card2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',fontSize:15,color:'var(--text)',width:'100%',outline:'none',textAlign:'right'},
@@ -164,39 +144,155 @@ const S={
 
 /* ══ COMPONENTES BASE ══ */
 const ChipP=({t,sm})=><span style={{display:'inline-block',padding:sm?'1px 6px':'2px 9px',borderRadius:20,fontSize:sm?9:11,fontWeight:700,color:t==='personal'?'#5b21b6':'#1e40af',background:t==='personal'?'#ede9fe':'#eff6ff'}}>{t==='personal'?'Personal':'Negocio'}</span>;
-
-function Toggle({opts,val,onChange,cm}){
-  return<div style={{display:'flex',gap:6}}>{opts.map(([v,l])=>{const c=cm?.[v]||'var(--primary)',a=val===v;return<button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:'9px 0',borderRadius:10,fontSize:13,fontWeight:600,border:`1.5px solid ${a?c:'var(--border)'}`,background:a?c+'18':'transparent',color:a?c:'var(--t2)',transition:'all 0.15s'}}>{l}</button>})}</div>;
-}
-
-function Nav({act,go}){
-  const tabs=[['dashboard','🏠','Inicio'],['movimientos','📋','Gastos'],['tarjetas','💳','Tarjetas'],['fijos','📌','Fijos'],['config','⚙️','Config']];
-  return<nav style={{position:'absolute',bottom:0,left:0,right:0,background:'var(--card)',borderTop:'0.5px solid var(--border)',display:'flex',zIndex:100}}>
-    {tabs.map(([id,ic,lb])=><button key={id} onClick={()=>go(id)} style={{flex:1,padding:'8px 0 6px',background:'none',border:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:2,color:act===id?'var(--primary)':'var(--t3)',transition:'color 0.2s'}}>
-      <span style={{fontSize:19}}>{ic}</span><span style={{fontSize:9,fontWeight:700,letterSpacing:'0.05em',textTransform:'uppercase'}}>{lb}</span>
-    </button>)}
-  </nav>;
-}
-
-function BtnEscala({esc,setEsc}){
-  const orden=['S','M','L','XL'];
-  const sig=()=>{const i=orden.indexOf(esc);setEsc(orden[(i+1)%orden.length]);};
-  return<button onClick={sig} style={{position:'absolute',bottom:80,left:16,height:36,borderRadius:18,background:'var(--card)',color:'var(--primary)',fontSize:'0.75rem',fontWeight:700,boxShadow:'0 2px 10px rgba(0,0,0,0.15)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99,border:'1px solid var(--border)',cursor:'pointer',padding:'0 12px',gap:4,letterSpacing:'0.05em'}}>
-    {['S','M','L','XL'].map(s=><span key={s} style={{opacity:s===esc?1:0.3,fontWeight:s===esc?800:500}}>{s}</span>)}
-  </button>;
-}
-
+function Toggle({opts,val,onChange,cm}){return<div style={{display:'flex',gap:6}}>{opts.map(([v,l])=>{const c=cm?.[v]||'var(--primary)',a=val===v;return<button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:'9px 0',borderRadius:10,fontSize:13,fontWeight:600,border:`1.5px solid ${a?c:'var(--border)'}`,background:a?c+'18':'transparent',color:a?c:'var(--t2)',transition:'all 0.15s'}}>{l}</button>})}</div>;}
+function Nav({act,go}){const tabs=[['dashboard','🏠','Inicio'],['movimientos','📋','Gastos'],['tarjetas','💳','Tarjetas'],['fijos','📌','Fijos'],['config','⚙️','Config']];return<nav style={{position:'absolute',bottom:0,left:0,right:0,background:'var(--card)',borderTop:'0.5px solid var(--border)',display:'flex',zIndex:100}}>{tabs.map(([id,ic,lb])=><button key={id} onClick={()=>go(id)} style={{flex:1,padding:'8px 0 6px',background:'none',border:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:2,color:act===id?'var(--primary)':'var(--t3)',transition:'color 0.2s'}}><span style={{fontSize:19}}>{ic}</span><span style={{fontSize:9,fontWeight:700,letterSpacing:'0.05em',textTransform:'uppercase'}}>{lb}</span></button>)}</nav>;}
+function BtnEscala({esc,setEsc}){const orden=['S','M','L','XL'];const sig=()=>{const i=orden.indexOf(esc);setEsc(orden[(i+1)%orden.length]);};return<button onClick={sig} style={{position:'absolute',bottom:80,left:16,height:36,borderRadius:18,background:'var(--card)',color:'var(--primary)',fontSize:'0.75rem',fontWeight:700,boxShadow:'0 2px 10px rgba(0,0,0,0.15)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99,border:'1px solid var(--border)',cursor:'pointer',padding:'0 12px',gap:4,letterSpacing:'0.05em'}}>{['S','M','L','XL'].map(s=><span key={s} style={{opacity:s===esc?1:0.3,fontWeight:s===esc?800:500}}>{s}</span>)}</button>;}
 function FAB({onClick}){return<button onClick={onClick} style={{position:'absolute',bottom:80,right:16,width:52,height:52,borderRadius:26,background:'var(--primary)',color:'#fff',fontSize:26,boxShadow:'0 4px 20px rgba(124,58,237,0.4)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99,border:'none',cursor:'pointer'}}>+</button>;}
+function Modal({onClose,title,children}){return<div style={{position:'absolute',inset:0,zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}><div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(6px)'}} onClick={onClose}/><div style={{position:'relative',background:'var(--card)',borderRadius:'22px 22px 0 0',maxHeight:'94%',overflowY:'auto',border:'0.5px solid var(--border)',borderBottom:'none'}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 18px 14px',borderBottom:'0.5px solid var(--border)',position:'sticky',top:0,background:'var(--card)',zIndex:1}}><span style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:700,color:'var(--text)'}}>{title}</span><button onClick={onClose} style={{background:'none',border:'none',color:'var(--t2)',fontSize:22,cursor:'pointer'}}>✕</button></div><div style={{padding:'18px 18px 32px'}}>{children}</div></div></div>;}
 
-function Modal({onClose,title,children}){
-  return<div style={{position:'absolute',inset:0,zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
-    <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(6px)'}} onClick={onClose}/>
-    <div style={{position:'relative',background:'var(--card)',borderRadius:'22px 22px 0 0',maxHeight:'94%',overflowY:'auto',border:'0.5px solid var(--border)',borderBottom:'none'}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 18px 14px',borderBottom:'0.5px solid var(--border)',position:'sticky',top:0,background:'var(--card)',zIndex:1}}>
-        <span style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:700,color:'var(--text)'}}>{title}</span>
-        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--t2)',fontSize:22,cursor:'pointer'}}>✕</button>
-      </div>
-      <div style={{padding:'18px 18px 32px'}}>{children}</div>
+/* ══ LOGO SVG ══ */
+const LogoSVG=()=><svg width="64" height="64" viewBox="0 0 76 76" style={{margin:'0 auto 12px',display:'block'}} xmlns="http://www.w3.org/2000/svg"><rect width="76" height="76" rx="18" fill="#ede9fe"/><line x1="19" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="57" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="19" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="57" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><circle cx="17" cy="17" r="8" fill="#8b5cf6"/><circle cx="59" cy="17" r="8" fill="#8b5cf6"/><circle cx="17" cy="59" r="8" fill="#8b5cf6"/><circle cx="59" cy="59" r="8" fill="#8b5cf6"/><circle cx="38" cy="38" r="17" fill="#7c3aed"/><rect x="27" y="31" width="22" height="3.5" rx="1.75" fill="white"/><rect x="27" y="37.5" width="22" height="3.5" rx="1.75" fill="white"/><rect x="27" y="44" width="22" height="3.5" rx="1.75" fill="white"/></svg>;
+
+/* ══════════════════════════════════════════
+   AUTH SCREEN — con activación por código
+══════════════════════════════════════════ */
+function AuthScreen(){
+  const[modo,setModo]=useState('login'); // 'login' | 'activar' | 'forgot'
+  const[paso,setPaso]=useState(1);       // activar: paso 1=código, paso 2=datos
+  // Activación
+  const[codigo,setCodigo]=useState('');
+  const[licDoc,setLicDoc]=useState(null);
+  const[codigoId,setCodigoId]=useState('');
+  // Datos comunes
+  const[nombre,setNombre]=useState('');
+  const[email,setEmail]=useState('');
+  const[pass,setPass]=useState('');
+  const[err,setErr]=useState('');
+  const[ok,setOk]=useState('');
+  const[carg,setCarg]=useState(false);
+
+  const errMsg=e=>{const c=e.code;if(c==='auth/invalid-email')return'Email inválido';if(c==='auth/user-not-found'||c==='auth/invalid-credential')return'Email o contraseña incorrectos';if(c==='auth/wrong-password')return'Contraseña incorrecta';if(c==='auth/email-already-in-use')return'Ya existe una cuenta con ese email';if(c==='auth/weak-password')return'La contraseña debe tener al menos 6 caracteres';return'Error: '+e.message;};
+
+  const cambiarModo=m=>{setModo(m);setErr('');setOk('');setPaso(1);setCodigo('');};
+
+  // ── VALIDAR CÓDIGO ──
+  const validarCodigo=async()=>{
+    const cod=codigo.trim().toUpperCase();
+    if(!cod)return setErr('Ingresá el código de activación');
+    setCarg(true);setErr('');
+    try{
+      const doc=await db.collection('licencias').doc(cod).get();
+      if(!doc.exists){setErr('❌ Código inválido. Verificá con Emma Soluciones Digitales.');setCarg(false);return;}
+      const d=doc.data();
+      if(d.uid&&d.uid!==''){setErr('❌ Este código ya fue utilizado.');setCarg(false);return;}
+      if(d.estado==='inactivo'){setErr('❌ Este código está desactivado. Contactá al administrador.');setCarg(false);return;}
+      setLicDoc(d);setCodigoId(cod);setPaso(2);
+    }catch(e){setErr('Error al validar: '+e.message);}
+    setCarg(false);
+  };
+
+  // ── ACTIVAR CUENTA ──
+  const activar=async()=>{
+    if(!nombre.trim())return setErr('Ingresá tu nombre');
+    if(!email.trim())return setErr('Ingresá tu email');
+    if(!pass||pass.length<6)return setErr('La contraseña debe tener al menos 6 caracteres');
+    setCarg(true);setErr('');
+    try{
+      const r=await auth.createUserWithEmailAndPassword(email.trim(),pass);
+      await r.user.updateProfile({displayName:nombre.trim()});
+      await db.collection('licencias').doc(codigoId).update({
+        uid:r.user.uid,email:email.trim().toLowerCase(),
+        nombre:nombre.trim(),estado:'usado',
+        fechaActivacion:new Date().toISOString()
+      });
+    }catch(e){setErr(errMsg(e));}
+    setCarg(false);
+  };
+
+  // ── LOGIN ──
+  const login=async()=>{setErr('');setCarg(true);try{await auth.signInWithEmailAndPassword(email,pass);}catch(e){setErr(errMsg(e));}setCarg(false);};
+
+  // ── RECUPERAR CONTRASEÑA ──
+  const recuperar=async()=>{if(!email.trim())return setErr('Ingresá tu email');setErr('');setCarg(true);try{await auth.sendPasswordResetEmail(email);setOk('✅ Email enviado. Revisá tu bandeja.');}catch(e){setErr(errMsg(e));}setCarg(false);};
+
+  return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px',overflowY:'auto',background:'var(--bg)'}}>
+    <div style={{textAlign:'center',marginBottom:24}}>
+      <LogoSVG/>
+      <div style={{fontFamily:'var(--fh)',fontSize:24,fontWeight:800,color:'var(--text)'}}>Emma Control</div>
+      <div style={{fontSize:13,color:'var(--t2)',marginTop:4}}>Gestión financiera personal y de negocio</div>
+    </div>
+
+    {/* Tabs principales */}
+    {modo!=='forgot'&&<div style={{display:'flex',background:'var(--card2)',borderRadius:12,padding:4,marginBottom:24,width:'100%',maxWidth:360}}>
+      {[['login','🔑 Ingresar'],['activar','🚀 Activar cuenta']].map(([v,l])=><button key={v} onClick={()=>cambiarModo(v)} style={{flex:1,padding:'9px 6px',borderRadius:10,fontSize:13,fontWeight:600,border:'none',background:modo===v?'var(--card)':'transparent',color:modo===v?'var(--primary)':'var(--t2)',transition:'all 0.2s',cursor:'pointer',boxShadow:modo===v?'0 1px 4px rgba(124,58,237,0.15)':'none'}}>{l}</button>)}
+    </div>}
+
+    <div style={{width:'100%',maxWidth:360}}>
+
+      {/* ── LOGIN ── */}
+      {modo==='login'&&<>
+        <label style={S.lbl}>Email</label>
+        <input style={{...S.inp,marginBottom:12}} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com" autoComplete="email"/>
+        <label style={S.lbl}>Contraseña</label>
+        <input style={{...S.inp,marginBottom:6}} type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==='Enter'&&login()}/>
+        <div style={{textAlign:'right',marginBottom:16}}>
+          <button onClick={()=>cambiarModo('forgot')} style={{background:'none',border:'none',color:'var(--t2)',fontSize:12,cursor:'pointer',textDecoration:'underline'}}>¿Olvidaste tu contraseña?</button>
+        </div>
+        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
+        <button style={S.btnP} onClick={login} disabled={carg}>{carg?<span className="spin">⏳</span>:'Ingresar'}</button>
+      </>}
+
+      {/* ── FORGOT ── */}
+      {modo==='forgot'&&<>
+        <div style={{textAlign:'center',marginBottom:20}}>
+          <div style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:700,marginBottom:6,color:'var(--text)'}}>Recuperar contraseña</div>
+          <div style={{fontSize:13,color:'var(--t2)'}}>Ingresá tu email y te enviamos un link</div>
+        </div>
+        <label style={S.lbl}>Email</label>
+        <input style={{...S.inp,marginBottom:14}} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com"/>
+        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
+        {ok&&<div style={{background:'#f0fdf4',border:'0.5px solid #bbf7d0',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#16a34a',marginBottom:14}}>{ok}</div>}
+        <button style={S.btnP} onClick={recuperar} disabled={carg}>{carg?<span className="spin">⏳</span>:'Enviar email'}</button>
+        <button onClick={()=>cambiarModo('login')} style={{...S.btn,width:'100%',marginTop:10,padding:'11px',textAlign:'center',fontSize:14}}>← Volver al login</button>
+      </>}
+
+      {/* ── ACTIVAR PASO 1: ingresar código ── */}
+      {modo==='activar'&&paso===1&&<>
+        <div style={{background:'var(--pdim)',border:'0.5px solid var(--pborder)',borderRadius:12,padding:'14px 16px',marginBottom:20,fontSize:13,color:'var(--primary)',lineHeight:1.6}}>
+          🔑 Ingresá el código que te proporcionó Emma Soluciones Digitales para activar tu cuenta.
+        </div>
+        <label style={S.lbl}>Código de activación</label>
+        <input
+          style={{...S.inp,marginBottom:16,fontSize:22,fontWeight:700,letterSpacing:'0.2em',textAlign:'center',textTransform:'uppercase'}}
+          value={codigo}
+          onChange={e=>setCodigo(e.target.value.toUpperCase())}
+          placeholder="EC2026-XXXX"
+          maxLength={14}
+          autoCapitalize="characters"
+        />
+        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
+        <button style={S.btnP} onClick={validarCodigo} disabled={carg}>{carg?<span className="spin">⏳</span>:'Validar código →'}</button>
+      </>}
+
+      {/* ── ACTIVAR PASO 2: crear usuario ── */}
+      {modo==='activar'&&paso===2&&<>
+        <div style={{background:'#f0fdf4',border:'0.5px solid #bbf7d0',borderRadius:12,padding:'12px 16px',marginBottom:20}}>
+          <div style={{fontSize:11,color:'#166534',fontWeight:700,marginBottom:3}}>✅ Código válido</div>
+          <div style={{fontSize:14,color:'#16a34a',fontWeight:600}}>{licDoc?.negocio||'Emma Control'}</div>
+          <div style={{fontSize:11,color:'#4ade80',marginTop:2}}>Plan: {licDoc?.plan||'demo'}{licDoc?.vencimiento?` · Vence: ${licDoc.vencimiento}`:''}</div>
+        </div>
+        <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>Ahora creá tu usuario para ingresar:</div>
+        <label style={S.lbl}>Tu nombre</label>
+        <input style={{...S.inp,marginBottom:12}} value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Tu nombre"/>
+        <label style={S.lbl}>Email</label>
+        <input style={{...S.inp,marginBottom:12}} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com"/>
+        <label style={S.lbl}>Contraseña</label>
+        <input style={{...S.inp,marginBottom:16}} type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Mínimo 6 caracteres"/>
+        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
+        <button style={S.btnP} onClick={activar} disabled={carg}>{carg?<span className="spin">⏳</span>:'🚀 Activar mi cuenta'}</button>
+        <button onClick={()=>{setPaso(1);setErr('');}} style={{...S.btn,width:'100%',marginTop:10,padding:'11px',textAlign:'center',fontSize:14}}>← Cambiar código</button>
+      </>}
+
     </div>
   </div>;
 }
@@ -207,32 +303,15 @@ function Calendario({movimientos}){
   const[mes,setMes]=useState({y:new Date().getFullYear(),m:new Date().getMonth()});
   const[diaSelec,setDiaSelec]=useState(null);
   const{y,m}=mes;
-
-  const movPorDia=useMemo(()=>{
-    const r={};
-    movimientos.forEach(mv=>{
-      if(!mv.fecha)return;
-      if(!r[mv.fecha])r[mv.fecha]=[];
-      r[mv.fecha].push(mv);
-    });
-    return r;
-  },[movimientos]);
-
-  const primer=new Date(y,m,1).getDay();
-  const offset=primer===0?6:primer-1;
-  const dias=new Date(y,m+1,0).getDate();
-  const celdas=[];
-  for(let i=0;i<offset;i++)celdas.push(null);
-  for(let d=1;d<=dias;d++)celdas.push(d);
-
+  const movPorDia=useMemo(()=>{const r={};movimientos.forEach(mv=>{if(!mv.fecha)return;if(!r[mv.fecha])r[mv.fecha]=[];r[mv.fecha].push(mv);});return r;},[movimientos]);
+  const primer=new Date(y,m,1).getDay();const offset=primer===0?6:primer-1;const dias=new Date(y,m+1,0).getDate();
+  const celdas=[];for(let i=0;i<offset;i++)celdas.push(null);for(let d=1;d<=dias;d++)celdas.push(d);
   const cambiar=dir=>{let nm=m+dir,ny=y;if(nm>11){nm=0;ny++;}if(nm<0){nm=11;ny--;}setMes({y:ny,m:nm});setDiaSelec(null);};
   const selDia=d=>{const k=`${y}-${pad(m+1)}-${pad(d)}`;setDiaSelec(diaSelec===k?null:k);};
   const isHoy=d=>hoyStr===`${y}-${pad(m+1)}-${pad(d)}`;
-
   const movDia=diaSelec?movPorDia[diaSelec]||[]:[];
   const ingDia=movDia.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);
   const gastDia=movDia.filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);
-
   return<div style={S.card}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
       <button onClick={()=>cambiar(-1)} style={{background:'none',border:'none',color:'var(--primary)',fontSize:20,cursor:'pointer',padding:'0 4px'}}>‹</button>
@@ -246,9 +325,7 @@ function Calendario({movimientos}){
       {celdas.map((d,i)=>{
         if(!d)return<div key={i}/>;
         const k=`${y}-${pad(m+1)}-${pad(d)}`;
-        const tieneMovs=!!movPorDia[k];
-        const selec=diaSelec===k;
-        const esHoyD=isHoy(d);
+        const tieneMovs=!!movPorDia[k];const selec=diaSelec===k;const esHoyD=isHoy(d);
         return<div key={i} onClick={()=>selDia(d)} style={{display:'flex',flexDirection:'column',alignItems:'center',cursor:'pointer',padding:'2px 0'}}>
           <div style={{width:30,height:30,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:esHoyD||selec?700:400,background:esHoyD?'var(--primary)':selec?'var(--pdim)':'transparent',color:esHoyD?'#fff':selec?'var(--primary)':'var(--text)',border:selec&&!esHoyD?'1.5px solid var(--primary)':'none'}}>{d}</div>
           {tieneMovs&&<div style={{width:4,height:4,borderRadius:'50%',background:esHoyD?'#fff':'var(--primary)',marginTop:1,opacity:0.7}}/>}
@@ -257,98 +334,23 @@ function Calendario({movimientos}){
     </div>
     {diaSelec&&<div style={{marginTop:10,padding:'10px 12px',background:'var(--card2)',borderRadius:10,border:'0.5px solid var(--border)'}}>
       <div style={{fontSize:11,fontWeight:700,color:'var(--primary)',marginBottom:6}}>{fechaLarga(diaSelec)}</div>
-      {movDia.length===0
-        ?<div style={{fontSize:12,color:'var(--t3)'}}>Sin movimientos registrados</div>
-        :<>
-          <div style={{display:'flex',gap:10,marginBottom:6}}>
-            {ingDia>0&&<span style={{fontSize:11,color:'#16a34a',fontWeight:600}}>↑ {fmt(ingDia)}</span>}
-            {gastDia>0&&<span style={{fontSize:11,color:'#dc2626',fontWeight:600}}>↓ {fmt(gastDia)}</span>}
-          </div>
-          {movDia.map(mv=><div key={mv.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0',borderBottom:'0.5px solid var(--border)'}}>
-            <span style={{color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'65%'}}>{mv.desc}</span>
-            <span style={{fontWeight:600,color:mv.tipo==='ingreso'?'#16a34a':'#dc2626',flexShrink:0}}>{mv.tipo==='ingreso'?'+':'-'}{fmt(mv.monto)}</span>
-          </div>)}
-        </>}
-    </div>}
-  </div>;
-}
-
-/* ══ AUTH ══ */
-function AuthScreen(){
-  const[modo,setModo]=useState('login');
-  const[email,setEmail]=useState('');const[pass,setPass]=useState('');const[nombre,setNombre]=useState('');
-  const[err,setErr]=useState('');const[ok,setOk]=useState('');const[carg,setCarg]=useState(false);
-  const errMsg=e=>{const c=e.code;if(c==='auth/invalid-email')return'Email inválido';if(c==='auth/user-not-found'||c==='auth/invalid-credential')return'Email o contraseña incorrectos';if(c==='auth/wrong-password')return'Contraseña incorrecta';if(c==='auth/email-already-in-use')return'Ya existe una cuenta con ese email';if(c==='auth/weak-password')return'La contraseña debe tener al menos 6 caracteres';return'Error: '+e.message;};
-  const login=async()=>{setErr('');setCarg(true);try{await auth.signInWithEmailAndPassword(email,pass);}catch(e){setErr(errMsg(e));}setCarg(false);};
-  const registrar=async()=>{
-    if(!nombre.trim())return setErr('Ingresá tu nombre');
-    setErr('');setCarg(true);
-    try{
-      const r=await auth.createUserWithEmailAndPassword(email,pass);
-      await r.user.updateProfile({displayName:nombre.trim()});
-      await db.collection('licencias').doc(r.user.uid).set({
-        uid:r.user.uid,nombre:nombre.trim(),email:email.trim().toLowerCase(),
-        estado:'pendiente',plan:'demo',vencimiento:null,
-        fechaAlta:new Date().toISOString()
-      });
-      setOk('✅ Cuenta creada. Tu acceso será activado en breve por el administrador.');
-    }catch(e){setErr(errMsg(e));}
-    setCarg(false);
-  };
-  const recuperar=async()=>{if(!email.trim())return setErr('Ingresá tu email');setErr('');setCarg(true);try{await auth.sendPasswordResetEmail(email);setOk('✅ Email enviado. Revisá tu bandeja.');}catch(e){setErr(errMsg(e));}setCarg(false);};
-
-  return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px',overflowY:'auto',background:'var(--bg)'}}>
-    <div style={{textAlign:'center',marginBottom:32}}>
-      <svg width="72" height="72" viewBox="0 0 76 76" style={{margin:'0 auto 12px',display:'block'}} xmlns="http://www.w3.org/2000/svg">
-        <rect width="76" height="76" rx="18" fill="#ede9fe"/>
-        <line x1="19" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/>
-        <line x1="57" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/>
-        <line x1="19" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/>
-        <line x1="57" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/>
-        <circle cx="17" cy="17" r="8" fill="#8b5cf6"/><circle cx="59" cy="17" r="8" fill="#8b5cf6"/>
-        <circle cx="17" cy="59" r="8" fill="#8b5cf6"/><circle cx="59" cy="59" r="8" fill="#8b5cf6"/>
-        <circle cx="38" cy="38" r="17" fill="#7c3aed"/>
-        <rect x="27" y="31" width="22" height="3.5" rx="1.75" fill="white"/>
-        <rect x="27" y="37.5" width="22" height="3.5" rx="1.75" fill="white"/>
-        <rect x="27" y="44" width="22" height="3.5" rx="1.75" fill="white"/>
-      </svg>
-      <div style={{fontFamily:'var(--fh)',fontSize:26,fontWeight:800,color:'var(--text)'}}>Emma Control</div>
-      <div style={{fontSize:13,color:'var(--t2)',marginTop:4}}>Gestión financiera personal y de negocio</div>
-    </div>
-
-    {modo!=='forgot'&&<div style={{display:'flex',background:'var(--card2)',borderRadius:12,padding:4,marginBottom:24,width:'100%',maxWidth:360}}>
-      {[['login','Ingresar'],['registro','Crear cuenta']].map(([v,l])=><button key={v} onClick={()=>{setModo(v);setErr('');setOk('');}} style={{flex:1,padding:'9px',borderRadius:10,fontSize:14,fontWeight:600,border:'none',background:modo===v?'var(--card)':'transparent',color:modo===v?'var(--primary)':'var(--t2)',transition:'all 0.2s',cursor:'pointer',boxShadow:modo===v?'0 1px 4px rgba(124,58,237,0.15)':'none'}}>{l}</button>)}
-    </div>}
-
-    <div style={{width:'100%',maxWidth:360}}>
-      {modo==='forgot'&&<div style={{textAlign:'center',marginBottom:20}}>
-        <div style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:700,marginBottom:6,color:'var(--text)'}}>Recuperar contraseña</div>
-        <div style={{fontSize:13,color:'var(--t2)'}}>Ingresá tu email y te enviamos un link</div>
-      </div>}
-      {modo==='registro'&&<><label style={S.lbl}>Tu nombre</label><input style={{...S.inp,marginBottom:12}} value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Guillermo"/></>}
-      <label style={S.lbl}>Email</label>
-      <input style={{...S.inp,marginBottom:12}} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com" autoComplete="email"/>
-      {modo!=='forgot'&&<>
-        <label style={S.lbl}>Contraseña</label>
-        <input style={{...S.inp,marginBottom:6}} type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Mínimo 6 caracteres" onKeyDown={e=>e.key==='Enter'&&(modo==='login'?login():registrar())}/>
-        {modo==='login'&&<div style={{textAlign:'right',marginBottom:16}}>
-          <button onClick={()=>{setModo('forgot');setErr('');setOk('');}} style={{background:'none',border:'none',color:'var(--t2)',fontSize:12,cursor:'pointer',textDecoration:'underline'}}>¿Olvidaste tu contraseña?</button>
-        </div>}
-        {modo==='registro'&&<div style={{height:14}}/>}
+      {movDia.length===0?<div style={{fontSize:12,color:'var(--t3)'}}>Sin movimientos registrados</div>:<>
+        <div style={{display:'flex',gap:10,marginBottom:6}}>
+          {ingDia>0&&<span style={{fontSize:11,color:'#16a34a',fontWeight:600}}>↑ {fmt(ingDia)}</span>}
+          {gastDia>0&&<span style={{fontSize:11,color:'#dc2626',fontWeight:600}}>↓ {fmt(gastDia)}</span>}
+        </div>
+        {movDia.map(mv=><div key={mv.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0',borderBottom:'0.5px solid var(--border)'}}>
+          <span style={{color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'65%'}}>{mv.desc}</span>
+          <span style={{fontWeight:600,color:mv.tipo==='ingreso'?'#16a34a':'#dc2626',flexShrink:0}}>{mv.tipo==='ingreso'?'+':'-'}{fmt(mv.monto)}</span>
+        </div>)}
       </>}
-      {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
-      {ok&&<div style={{background:'#f0fdf4',border:'0.5px solid #bbf7d0',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#16a34a',marginBottom:14}}>{ok}</div>}
-      {modo==='login'&&<button style={S.btnP} onClick={login} disabled={carg}>{carg?<span className="spin">⏳</span>:'Ingresar'}</button>}
-      {modo==='registro'&&<button style={S.btnP} onClick={registrar} disabled={carg}>{carg?<span className="spin">⏳</span>:'Crear cuenta'}</button>}
-      {modo==='forgot'&&<><button style={S.btnP} onClick={recuperar} disabled={carg}>{carg?<span className="spin">⏳</span>:'Enviar email'}</button><button onClick={()=>{setModo('login');setErr('');setOk('');}} style={{...S.btn,width:'100%',marginTop:10,padding:'11px',textAlign:'center',fontSize:14}}>Volver al login</button></>}
-    </div>
+    </div>}
   </div>;
 }
 
-/* ══ MODAL MOVIMIENTO ══ */
+/* ══ MODALES ══ */
 function ModalMov({tarjetas,onGuardar,onClose,tipoInicial}){
-  const[tipo,setTipo]=useState(tipoInicial||'gasto');
-  const[ent,setEnt]=useState('negocio');
+  const[tipo,setTipo]=useState(tipoInicial||'gasto');const[ent,setEnt]=useState('negocio');
   const[desc,setDesc]=useState('');const[monto,setMonto]=useState('');const[fecha,setFecha]=useState(hoy());
   const[metodo,setMetodo]=useState('efectivo');const[tid,setTid]=useState(tarjetas[0]?.id||'');
   const[cuotas,setCuotas]=useState(1);const[cat,setCat]=useState('');
@@ -362,9 +364,7 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial}){
       const tarj=tarjetas.find(t=>t.id===tid);const mc=Math.round(m/cuotas);
       const venc=Array.from({length:cuotas},(_,i)=>{if(tarj?.diaVenc){const d=new Date(fecha+'T12:00:00');d.setMonth(d.getMonth()+i+1);d.setDate(tarj.diaVenc);return d.toISOString().slice(0,10);}return addM(fecha,i+1);});
       onGuardar({id:uid2(),tipo:'cuota',ent,desc,montoTotal:m,cuotas,montoCuota:mc,tarjetaId:tid,fecha,cat,venc});
-    }else{
-      onGuardar({id:uid2(),tipo,ent,desc,monto:m,fecha,metodo:tipo==='gasto'?metodo:'',tarjetaId:metodo==='tarjeta'&&tipo==='gasto'?tid:'',cat});
-    }
+    }else{onGuardar({id:uid2(),tipo,ent,desc,monto:m,fecha,metodo:tipo==='gasto'?metodo:'',tarjetaId:metodo==='tarjeta'&&tipo==='gasto'?tid:'',cat});}
     onClose();
   };
   const mn=Number(monto)||0;
@@ -404,44 +404,21 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial}){
   </Modal>;
 }
 
-/* ══ MODAL EDITAR MOVIMIENTO ══ */
 function ModalEditMov({mov,tarjetas,onGuardar,onClose}){
   const esCuota=mov.tipo==='cuota';
-  const[tipo,setTipo]=useState(esCuota?'gasto':mov.tipo);
-  const[ent,setEnt]=useState(mov.ent||'negocio');
-  const[desc,setDesc]=useState(mov.desc||'');
-  const[monto,setMonto]=useState(esCuota?(mov.montoTotal||''):(mov.monto||''));
-  const[fecha,setFecha]=useState(mov.fecha||hoy());
-  const[metodo,setMetodo]=useState(mov.metodo||'efectivo');
-  const[cat,setCat]=useState(mov.cat||'');
+  const[tipo,setTipo]=useState(esCuota?'gasto':mov.tipo);const[ent,setEnt]=useState(mov.ent||'negocio');
+  const[desc,setDesc]=useState(mov.desc||'');const[monto,setMonto]=useState(esCuota?(mov.montoTotal||''):(mov.monto||''));
+  const[fecha,setFecha]=useState(mov.fecha||hoy());const[metodo,setMetodo]=useState(mov.metodo||'efectivo');const[cat,setCat]=useState(mov.cat||'');
   const cats=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
-
-  const guardar=()=>{
-    if(!desc.trim())return alert('Escribí una descripción');
-    if(!esCuota&&(!monto||Number(monto)<=0))return alert('Ingresá un monto válido');
-    if(esCuota){onGuardar({...mov,desc,fecha,cat,ent});}
-    else{onGuardar({...mov,tipo,ent,desc,monto:Number(monto),fecha,metodo,cat});}
-    onClose();
-  };
-
+  const guardar=()=>{if(!desc.trim())return alert('Escribí una descripción');if(!esCuota&&(!monto||Number(monto)<=0))return alert('Ingresá un monto válido');if(esCuota){onGuardar({...mov,desc,fecha,cat,ent});}else{onGuardar({...mov,tipo,ent,desc,monto:Number(monto),fecha,metodo,cat});}onClose();};
   return<Modal onClose={onClose} title="✏️ Editar movimiento">
     {esCuota&&<div style={{background:'#fffbeb',border:'0.5px solid #fde68a',borderRadius:10,padding:'10px 14px',fontSize:12,color:'#92400e',marginBottom:14}}>💳 Es una compra en cuotas. Solo podés editar la descripción, fecha y categoría.</div>}
-    {!esCuota&&<>
-      <div style={{marginBottom:12}}><Toggle opts={[['gasto','💸 Gasto'],['ingreso','💰 Ingreso']]} val={tipo} onChange={setTipo} cm={{gasto:'var(--danger)',ingreso:'var(--success)'}}/></div>
-      <div style={{marginBottom:12}}><Toggle opts={[['personal','👤 Personal'],['negocio','🏭 Negocio']]} val={ent} onChange={setEnt} cm={{personal:'var(--pers)',negocio:'var(--neg)'}}/></div>
-    </>}
-    <label style={S.lbl}>Descripción</label>
-    <input style={{...S.inp,marginBottom:12}} value={desc} onChange={e=>setDesc(e.target.value)}/>
-    {!esCuota&&<><label style={S.lbl}>Monto $</label>
-    <input style={{...S.inpR,marginBottom:12}} type="number" inputMode="numeric" value={monto} onChange={e=>setMonto(e.target.value)}/></>}
-    <label style={S.lbl}>Fecha</label>
-    <input style={{...S.inp,marginBottom:12}} type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/>
-    <label style={S.lbl}>Categoría</label>
-    <select style={{...S.inp,marginBottom:12}} value={cat} onChange={e=>setCat(e.target.value)}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
-    {!esCuota&&<><label style={S.lbl}>Método de pago</label>
-    <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
-      {['efectivo','débito','tarjeta','transferencia'].map(mt=><button key={mt} onClick={()=>setMetodo(mt)} style={{padding:'7px 13px',borderRadius:20,border:`1px solid ${metodo===mt?'var(--primary)':'var(--border)'}`,background:metodo===mt?'var(--pdim)':'transparent',color:metodo===mt?'var(--primary)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{mt}</button>)}
-    </div></>}
+    {!esCuota&&<><div style={{marginBottom:12}}><Toggle opts={[['gasto','💸 Gasto'],['ingreso','💰 Ingreso']]} val={tipo} onChange={setTipo} cm={{gasto:'var(--danger)',ingreso:'var(--success)'}}/></div><div style={{marginBottom:12}}><Toggle opts={[['personal','👤 Personal'],['negocio','🏭 Negocio']]} val={ent} onChange={setEnt} cm={{personal:'var(--pers)',negocio:'var(--neg)'}}/></div></>}
+    <label style={S.lbl}>Descripción</label><input style={{...S.inp,marginBottom:12}} value={desc} onChange={e=>setDesc(e.target.value)}/>
+    {!esCuota&&<><label style={S.lbl}>Monto $</label><input style={{...S.inpR,marginBottom:12}} type="number" inputMode="numeric" value={monto} onChange={e=>setMonto(e.target.value)}/></>}
+    <label style={S.lbl}>Fecha</label><input style={{...S.inp,marginBottom:12}} type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/>
+    <label style={S.lbl}>Categoría</label><select style={{...S.inp,marginBottom:12}} value={cat} onChange={e=>setCat(e.target.value)}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+    {!esCuota&&<><label style={S.lbl}>Método de pago</label><div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>{['efectivo','débito','tarjeta','transferencia'].map(mt=><button key={mt} onClick={()=>setMetodo(mt)} style={{padding:'7px 13px',borderRadius:20,border:`1px solid ${metodo===mt?'var(--primary)':'var(--border)'}`,background:metodo===mt?'var(--pdim)':'transparent',color:metodo===mt?'var(--primary)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{mt}</button>)}</div></>}
     <button style={S.btnP} onClick={guardar}>Guardar cambios</button>
   </Modal>;
 }
@@ -464,13 +441,12 @@ function ModalTarj({tarjeta,onGuardar,onClose}){
       <div><label style={S.lbl}>Día vencimiento</label><input style={S.inpR} type="number" min={1} max={31} value={d.diaVenc} onChange={e=>set('diaVenc',e.target.value)} placeholder="5"/></div>
     </div>
     <label style={S.lbl}>Límite $</label><input style={{...S.inpR,marginBottom:14}} type="number" value={d.limite} onChange={e=>set('limite',e.target.value)} placeholder="0"/>
-    <label style={S.lbl}>Color de la tarjeta</label>
+    <label style={S.lbl}>Color</label>
     <div style={{display:'flex',gap:8,marginBottom:18,flexWrap:'wrap'}}>{CCOLORS.map(c=><button key={c} onClick={()=>set('color',c)} style={{width:30,height:30,borderRadius:'50%',background:c,border:d.color===c?'2.5px solid #7c3aed':'2.5px solid transparent',cursor:'pointer',flexShrink:0}}/>)}</div>
     <button style={S.btnP} onClick={guardar}>Guardar tarjeta</button>
   </Modal>;
 }
 
-/* ══ MODAL FIJO ══ */
 function ModalFijo({fijo,onGuardar,onClose}){
   const[d,sd]=useState({nombre:fijo?.nombre||'',monto:fijo?.monto||'',diaVenc:fijo?.diaVenc||'',entidad:fijo?.entidad||'personal',cat:fijo?.cat||'Servicios',activo:fijo?.activo!==false});
   const set=(k,v)=>sd(p=>({...p,[k]:v}));
@@ -507,12 +483,10 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
   const ingAnio=movAnio.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);
   const gasAnio=movAnio.filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0)+movs.filter(m=>m.tipo==='cuota'&&(m.venc||[]).some(v=>v.startsWith(anioActual))).reduce((a,m)=>a+m.montoCuota*(m.venc||[]).filter(v=>v.startsWith(anioActual)).length,0);
   const balAnio=ingAnio-gasAnio;
-
   const venc=[];
   movs.filter(m=>m.tipo==='cuota').forEach(m=>(m.venc||[]).forEach((v,i)=>{const d=dh(v);if(d>=0&&d<=14)venc.push({label:`${m.desc} (${i+1}/${m.cuotas})`,monto:m.montoCuota,d,ico:'💳'});}));
   fijosPend.forEach(f=>{const[y,mo]=hoy().split('-');const fv=`${y}-${mo}-${pad(f.diaVenc)}`;const d=dh(fv);if(d>=-2&&d<=14)venc.push({label:f.nombre,monto:f.monto,d,ico:'📌'});});
   venc.sort((a,b)=>a.d-b.d);
-
   return<div style={S.scr}>
     <div style={{padding:'16px 18px 14px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
@@ -537,7 +511,6 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
         </div>
       </div>
     </div>
-
     <div style={{padding:'14px 14px 0'}}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
         <div onClick={onVerIngresos} style={{...S.card2,cursor:'pointer',borderColor:'var(--sborder)',background:'#f0fdf4'}}>
@@ -551,14 +524,11 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
           <div style={{fontSize:10,color:'#f87171',marginTop:3}}>Ver detalle →</div>
         </div>
       </div>
-
       {totPend>0&&<div style={{...S.card2,marginBottom:12,background:'#fffbeb',borderColor:'#fde68a',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <span style={{fontSize:13,color:'#92400e',fontWeight:500}}>📌 Gastos fijos pendientes</span>
         <span style={{fontFamily:'var(--fn)',fontSize:15,fontWeight:700,color:'#d97706',letterSpacing:'-0.01em'}}>{fmt(totPend)}</span>
       </div>}
-
       <Calendario movimientos={movs}/>
-
       {venc.length>0&&<div style={{...S.card,marginTop:12}}>
         <div style={{...S.st,marginBottom:10}}>⚠️ Próximos vencimientos</div>
         {venc.slice(0,4).map((v,i)=><div key={i} style={{...S.row,borderBottom:i<Math.min(venc.length,4)-1?'0.5px solid #f0eeff':'none'}}>
@@ -576,8 +546,7 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
 
 /* ══ DETALLE INGRESOS ══ */
 function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
-  const mesK=mk(hoy());
-  const[mes,setMes]=useState(mesK);
+  const mesK=mk(hoy());const[mes,setMes]=useState(mesK);
   const meses=useMemo(()=>{const s=new Set(movs.filter(m=>m.tipo==='ingreso').map(m=>mk(m.fecha)));s.add(mesK);return[...s].sort().reverse();},[movs]);
   const lista=movs.filter(m=>m.tipo==='ingreso'&&mk(m.fecha)===mes).sort((a,b)=>b.fecha.localeCompare(a.fecha));
   const total=lista.reduce((a,m)=>a+m.monto,0);
@@ -585,7 +554,6 @@ function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
   const icoMetodo={efectivo:'💵',tarjeta:'💳',débito:'💳',transferencia:'📲'};
   const porDia=useMemo(()=>{const r={};lista.forEach(m=>{if(!r[m.fecha])r[m.fecha]=[];r[m.fecha].push(m);});return r;},[lista]);
   const dias=useMemo(()=>Object.keys(porDia).sort((a,b)=>b.localeCompare(a)),[porDia]);
-
   return<div style={{...S.scr,WebkitOverflowScrolling:'touch'}} data-scroll="1">
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
@@ -596,39 +564,24 @@ function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
       <div style={{background:'#f0fdf4',borderRadius:12,padding:'12px 14px',border:'0.5px solid #bbf7d0'}}>
         <div style={{fontSize:9,color:'#166534',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>Total del mes</div>
         <div style={{fontFamily:'var(--fn)',fontSize:26,fontWeight:700,color:'#16a34a',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
-        <div style={{fontSize:11,color:'#4ade80',marginTop:2}}>{lista.length} ingreso{lista.length!==1?'s':''} registrado{lista.length!==1?'s':''}</div>
+        <div style={{fontSize:11,color:'#4ade80',marginTop:2}}>{lista.length} ingreso{lista.length!==1?'s':''}</div>
       </div>
     </div>
     <div style={{padding:'14px 14px 0'}}>
-      {porCat.length>0&&<><div style={{...S.st,marginBottom:8}}>Por categoría</div>
-      <div style={{...S.card,marginBottom:12,padding:'10px 14px'}}>
-        {porCat.map(([cat,v],i)=><div key={cat} style={{...S.row,borderBottom:i<porCat.length-1?'0.5px solid #f0eeff':'none'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:8,height:8,borderRadius:'50%',background:`hsl(${140+i*30},60%,40%)`,flexShrink:0}}/>
-            <span style={{fontSize:13,color:'var(--text)'}}>{cat}</span>
-          </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#16a34a'}}>{fmt(v)}</div>
-            {total>0&&<div style={{fontSize:10,color:'var(--t3)'}}>{Math.round(v/total*100)}%</div>}
-          </div>
-        </div>)}
-      </div></>}
+      {porCat.length>0&&<><div style={{...S.st,marginBottom:8}}>Por categoría</div><div style={{...S.card,marginBottom:12,padding:'10px 14px'}}>{porCat.map(([cat,v],i)=><div key={cat} style={{...S.row,borderBottom:i<porCat.length-1?'0.5px solid #f0eeff':'none'}}><div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:8,height:8,borderRadius:'50%',background:`hsl(${140+i*30},60%,40%)`,flexShrink:0}}/><span style={{fontSize:13,color:'var(--text)'}}>{cat}</span></div><div style={{textAlign:'right'}}><div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#16a34a'}}>{fmt(v)}</div>{total>0&&<div style={{fontSize:10,color:'var(--t3)'}}>{Math.round(v/total*100)}%</div>}</div></div>)}</div></>}
       <div style={{...S.st,marginBottom:4}}>Todos los ingresos</div>
       {lista.length===0&&<div style={{textAlign:'center',padding:'30px 0',color:'var(--t3)',fontSize:14}}>Sin ingresos este mes</div>}
       {dias.map((dia,i)=><div key={dia}>
         {i>0&&<div style={{height:'1.5px',background:'var(--border)',margin:'10px 0'}}/>}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0 8px'}}>
           <div style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:800,color:'var(--text)',letterSpacing:'-0.01em'}}>{fechaLarga(dia)}</div>
-          <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#16a34a',letterSpacing:'-0.01em'}}>+{fmt(porDia[dia].reduce((a,m)=>a+m.monto,0))}</div>
+          <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#16a34a'}}>+{fmt(porDia[dia].reduce((a,m)=>a+m.monto,0))}</div>
         </div>
         {porDia[dia].map(m=><div key={m.id} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:36,height:36,borderRadius:10,background:'#f0fdf4',border:'0.5px solid #bbf7d0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{icoMetodo[m.metodo]||'💰'}</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div>
-            <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div>
-          </div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div></div>
           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:'#16a34a',letterSpacing:'-0.01em'}}>+{fmt(m.monto)}</div>
+            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:'#16a34a'}}>+{fmt(m.monto)}</div>
             <button onClick={()=>onEditar(m)} style={{background:'var(--pdim)',border:'none',color:'var(--primary)',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>✏️</button>
             <button onClick={()=>onEliminar(m.id)} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>🗑️</button>
           </div>
@@ -641,15 +594,11 @@ function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
 
 /* ══ DETALLE EGRESOS ══ */
 function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
-  const mesK=mk(hoy());
-  const[mes,setMes]=useState(mesK);
-  const[filtEnt,setFiltEnt]=useState('todos');
+  const mesK=mk(hoy());const[mes,setMes]=useState(mesK);const[filtEnt,setFiltEnt]=useState('todos');
   const meses=useMemo(()=>{const s=new Set(movs.filter(m=>m.tipo==='gasto'||m.tipo==='cuota').map(m=>mk(m.fecha)));s.add(mesK);return[...s].sort().reverse();},[movs]);
-
   const gastos=movs.filter(m=>m.tipo==='gasto'&&mk(m.fecha)===mes);
   const cuotas=movs.filter(m=>m.tipo==='cuota'&&(m.venc||[]).some(v=>mk(v)===mes));
   const lista=[...gastos,...cuotas.map(c=>{const idx=(c.venc||[]).findIndex(v=>mk(v)===mes);return{...c,monto:c.montoCuota,tipo:'gasto',_cuota:true,_nCuota:idx+1,_label:`Cuota ${idx+1}/${c.cuotas}`};})].filter(m=>filtEnt==='todos'||m.ent===filtEnt).sort((a,b)=>b.fecha.localeCompare(a.fecha));
-
   const total=lista.reduce((a,m)=>a+m.monto,0);
   const totP=lista.filter(m=>m.ent==='personal').reduce((a,m)=>a+m.monto,0);
   const totN=lista.filter(m=>m.ent==='negocio').reduce((a,m)=>a+m.monto,0);
@@ -657,7 +606,6 @@ function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
   const icoMetodo={efectivo:'💵',tarjeta:'💳',débito:'💳',transferencia:'📲'};
   const porDia=useMemo(()=>{const r={};lista.forEach(m=>{if(!r[m.fecha])r[m.fecha]=[];r[m.fecha].push(m);});return r;},[lista]);
   const dias=useMemo(()=>Object.keys(porDia).sort((a,b)=>b.localeCompare(a)),[porDia]);
-
   return<div style={{...S.scr,WebkitOverflowScrolling:'touch'}} data-scroll="1">
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
@@ -668,47 +616,27 @@ function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
       <div style={{background:'#fef2f2',borderRadius:12,padding:'12px 14px',border:'0.5px solid #fecaca',marginBottom:10}}>
         <div style={{fontSize:9,color:'#991b1b',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>Total del mes</div>
         <div style={{fontFamily:'var(--fn)',fontSize:26,fontWeight:700,color:'#dc2626',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
-        <div style={{display:'flex',gap:14,marginTop:4}}>
-          <span style={{fontSize:11,color:'#991b1b'}}>Personal <b>{fmt(totP)}</b></span>
-          <span style={{fontSize:11,color:'#991b1b'}}>Negocio <b>{fmt(totN)}</b></span>
-        </div>
+        <div style={{display:'flex',gap:14,marginTop:4}}><span style={{fontSize:11,color:'#991b1b'}}>Personal <b>{fmt(totP)}</b></span><span style={{fontSize:11,color:'#991b1b'}}>Negocio <b>{fmt(totN)}</b></span></div>
       </div>
-      <div style={{display:'flex',gap:6}}>
-        {[['todos','Todos'],['personal','Personal'],['negocio','Negocio']].map(([v,l])=><button key={v} onClick={()=>setFiltEnt(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtEnt===v?'var(--primary)':'var(--border)'}`,background:filtEnt===v?'var(--pdim)':'transparent',color:filtEnt===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}
-      </div>
+      <div style={{display:'flex',gap:6}}>{[['todos','Todos'],['personal','Personal'],['negocio','Negocio']].map(([v,l])=><button key={v} onClick={()=>setFiltEnt(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtEnt===v?'var(--primary)':'var(--border)'}`,background:filtEnt===v?'var(--pdim)':'transparent',color:filtEnt===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}</div>
     </div>
     <div style={{padding:'14px 14px 0'}}>
-      {porCat.length>0&&<><div style={{...S.st,marginBottom:8}}>Por categoría</div>
-      <div style={{...S.card,marginBottom:12,padding:'10px 14px'}}>
-        {porCat.map(([cat,v],i)=><div key={cat} style={{...S.row,borderBottom:i<porCat.length-1?'0.5px solid #f0eeff':'none'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:8,height:8,borderRadius:'50%',background:`hsl(${0+i*25},65%,50%)`,flexShrink:0}}/>
-            <span style={{fontSize:13,color:'var(--text)'}}>{cat}</span>
-          </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#dc2626'}}>{fmt(v)}</div>
-            {total>0&&<div style={{fontSize:10,color:'var(--t3)'}}>{Math.round(v/total*100)}%</div>}
-          </div>
-        </div>)}
-      </div></>}
+      {porCat.length>0&&<><div style={{...S.st,marginBottom:8}}>Por categoría</div><div style={{...S.card,marginBottom:12,padding:'10px 14px'}}>{porCat.map(([cat,v],i)=><div key={cat} style={{...S.row,borderBottom:i<porCat.length-1?'0.5px solid #f0eeff':'none'}}><div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:8,height:8,borderRadius:'50%',background:`hsl(${0+i*25},65%,50%)`,flexShrink:0}}/><span style={{fontSize:13,color:'var(--text)'}}>{cat}</span></div><div style={{textAlign:'right'}}><div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#dc2626'}}>{fmt(v)}</div>{total>0&&<div style={{fontSize:10,color:'var(--t3)'}}>{Math.round(v/total*100)}%</div>}</div></div>)}</div></>}
       <div style={{...S.st,marginBottom:4}}>Todos los egresos</div>
       {lista.length===0&&<div style={{textAlign:'center',padding:'30px 0',color:'var(--t3)',fontSize:14}}>Sin egresos este mes</div>}
       {dias.map((dia,i)=><div key={dia}>
         {i>0&&<div style={{height:'1.5px',background:'var(--border)',margin:'10px 0'}}/>}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0 8px'}}>
           <div style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:800,color:'var(--text)',letterSpacing:'-0.01em'}}>{fechaLarga(dia)}</div>
-          <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#dc2626',letterSpacing:'-0.01em'}}>-{fmt(porDia[dia].reduce((a,m)=>a+m.monto,0))}</div>
+          <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#dc2626'}}>-{fmt(porDia[dia].reduce((a,m)=>a+m.monto,0))}</div>
         </div>
         {porDia[dia].map(m=><div key={m.id+(m._nCuota||'')} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:36,height:36,borderRadius:10,background:m._cuota?'#fffbeb':'#fef2f2',border:`0.5px solid ${m._cuota?'#fde68a':'#fecaca'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{m._cuota?'💳':icoMetodo[m.metodo]||'💸'}</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div>
-            <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m._cuota?<span style={{fontSize:10,color:'#d97706',fontWeight:600}}>{m._label}</span>:<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div>
-          </div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m._cuota?<span style={{fontSize:10,color:'#d97706',fontWeight:600}}>{m._label}</span>:<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div></div>
           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m._cuota?'#d97706':'#dc2626',letterSpacing:'-0.01em'}}>-{fmt(m.monto)}</div>
+            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m._cuota?'#d97706':'#dc2626'}}>-{fmt(m.monto)}</div>
             {!m._cuota&&<button onClick={()=>onEditar(m)} style={{background:'var(--pdim)',border:'none',color:'var(--primary)',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>✏️</button>}
-            <button onClick={()=>onEliminar(m._cuota?m.id:m.id)} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>🗑️</button>
+            <button onClick={()=>onEliminar(m.id)} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>🗑️</button>
           </div>
         </div>)}
       </div>)}
@@ -727,42 +655,27 @@ function Movimientos({movs,onNuevo,onEliminar,onEditar}){
   const icoM={tarjeta:'💳',efectivo:'💵',débito:'💳',transferencia:'📲'};
   const porDia=useMemo(()=>{const r={};lista.forEach(m=>{if(!r[m.fecha])r[m.fecha]=[];r[m.fecha].push(m);});return r;},[lista]);
   const dias=useMemo(()=>Object.keys(porDia).sort((a,b)=>b.localeCompare(a)),[porDia]);
-
   return<div style={S.scr} data-scroll="1">
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}>
       <div style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)',marginBottom:10}}>Movimientos</div>
       <select value={mes} onChange={e=>setMes(e.target.value)} style={{...S.inp,marginBottom:10,fontSize:13}}>{meses.map(m=><option key={m} value={m}>{mlabel(m)}</option>)}</select>
-      <div style={{display:'flex',gap:6,marginBottom:8}}>
-        {[['todos','Todos'],['gasto','Gastos'],['ingreso','Ingresos']].map(([v,l])=><button key={v} onClick={()=>setFiltT(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtT===v?'var(--primary)':'var(--border)'}`,background:filtT===v?'var(--pdim)':'transparent',color:filtT===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}
-      </div>
-      <div style={{display:'flex',gap:6}}>
-        {[['todos','Todos'],['personal','Personal'],['negocio','Negocio']].map(([v,l])=><button key={v} onClick={()=>setFiltE(v)} style={{flex:1,padding:'6px 0',borderRadius:20,fontSize:11,fontWeight:600,cursor:'pointer',border:`1px solid ${filtE===v?'var(--info)':'var(--border)'}`,background:filtE===v?'var(--idim)':'transparent',color:filtE===v?'var(--info)':'var(--t2)'}}>{l}</button>)}
-      </div>
+      <div style={{display:'flex',gap:6,marginBottom:8}}>{[['todos','Todos'],['gasto','Gastos'],['ingreso','Ingresos']].map(([v,l])=><button key={v} onClick={()=>setFiltT(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtT===v?'var(--primary)':'var(--border)'}`,background:filtT===v?'var(--pdim)':'transparent',color:filtT===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}</div>
+      <div style={{display:'flex',gap:6}}>{[['todos','Todos'],['personal','Personal'],['negocio','Negocio']].map(([v,l])=><button key={v} onClick={()=>setFiltE(v)} style={{flex:1,padding:'6px 0',borderRadius:20,fontSize:11,fontWeight:600,cursor:'pointer',border:`1px solid ${filtE===v?'var(--info)':'var(--border)'}`,background:filtE===v?'var(--idim)':'transparent',color:filtE===v?'var(--info)':'var(--t2)'}}>{l}</button>)}</div>
     </div>
     <div style={{padding:'12px 14px 0'}}>
-      <div style={{display:'flex',gap:8,marginBottom:12}}>
-        {[['Ingresos',totI,'#16a34a'],['Gastos',totG,'#dc2626'],['Balance',totI-totG,(totI-totG)>=0?'#16a34a':'#dc2626']].map(([l,v,c])=><div key={l} style={{flex:1,...S.card2,textAlign:'center',padding:'10px 6px'}}>
-          <div style={{fontSize:9,color:'var(--t2)',marginBottom:3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{l}</div>
-          <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:c,letterSpacing:'-0.01em'}}>{fmt(v)}</div>
-        </div>)}
-      </div>
+      <div style={{display:'flex',gap:8,marginBottom:12}}>{[['Ingresos',totI,'#16a34a'],['Gastos',totG,'#dc2626'],['Balance',totI-totG,(totI-totG)>=0?'#16a34a':'#dc2626']].map(([l,v,c])=><div key={l} style={{flex:1,...S.card2,textAlign:'center',padding:'10px 6px'}}><div style={{fontSize:9,color:'var(--t2)',marginBottom:3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{l}</div><div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:c}}>{fmt(v)}</div></div>)}</div>
       {lista.length===0&&<div style={{textAlign:'center',padding:'30px 0',color:'var(--t3)',fontSize:14}}>Sin movimientos en este período</div>}
       {dias.map((dia,i)=><div key={dia}>
-        {i>0&&<div style={{display:'flex',alignItems:'center',gap:8,margin:'12px 0 0'}}><div style={{flex:1,height:'1.5px',background:'var(--border)'}}/></div>}
+        {i>0&&<div style={{height:'1.5px',background:'var(--border)',margin:'12px 0 0'}}/>}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0 8px'}}>
           <div style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:800,color:'var(--text)',letterSpacing:'-0.01em'}}>{fechaLarga(dia)}</div>
-          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
-            {(()=>{const di=porDia[dia].filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);const dg=porDia[dia].filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);return[di>0&&<span key='i' style={{fontFamily:'var(--fn)',fontSize:12,fontWeight:700,color:'#16a34a'}}>+{fmt(di)}</span>,dg>0&&<span key='g' style={{fontFamily:'var(--fn)',fontSize:12,fontWeight:700,color:'#dc2626'}}>-{fmt(dg)}</span>];})()}
-          </div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>{(()=>{const di=porDia[dia].filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);const dg=porDia[dia].filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);return[di>0&&<span key='i' style={{fontFamily:'var(--fn)',fontSize:12,fontWeight:700,color:'#16a34a'}}>+{fmt(di)}</span>,dg>0&&<span key='g' style={{fontFamily:'var(--fn)',fontSize:12,fontWeight:700,color:'#dc2626'}}>-{fmt(dg)}</span>];})()}</div>
         </div>
         {porDia[dia].map(m=><div key={m.id} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:36,height:36,borderRadius:10,background:m.tipo==='ingreso'?'#f0fdf4':'#fef2f2',border:`0.5px solid ${m.tipo==='ingreso'?'#bbf7d0':'#fecaca'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{m.tipo==='ingreso'?'💰':icoM[m.metodo]||'💸'}</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:500,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div>
-            <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div>
-          </div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:500,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div></div>
           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m.tipo==='ingreso'?'#16a34a':'#dc2626',letterSpacing:'-0.01em'}}>{m.tipo==='ingreso'?'+':'-'}{fmt(m.monto)}</div>
+            <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m.tipo==='ingreso'?'#16a34a':'#dc2626'}}>{m.tipo==='ingreso'?'+':'-'}{fmt(m.monto)}</div>
             <button onClick={()=>onEditar(m)} style={{background:'var(--pdim)',border:'none',color:'var(--primary)',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>✏️</button>
             <button onClick={()=>onEliminar(m.id)} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:14,cursor:'pointer',padding:'4px 7px',borderRadius:8}}>🗑️</button>
           </div>
@@ -784,10 +697,7 @@ function Tarjetas({tarjetas,movs,onAgregar,onEditar,onEliminar}){
       <button onClick={onAgregar} style={{...S.btn,background:'var(--primary)',color:'#fff',border:'none',fontWeight:700}}>+ Agregar</button>
     </div>
     <div style={{padding:'14px 14px 0'}}>
-      {deuda>0&&<div style={{...S.card,background:'#fef2f2',border:'0.5px solid #fecaca',marginBottom:14,textAlign:'center'}}>
-        <div style={{fontSize:11,color:'#991b1b',marginBottom:4}}>Deuda total en cuotas restantes</div>
-        <div style={{fontFamily:'var(--fh)',fontSize:26,fontWeight:800,color:'#dc2626'}}>{fmt(deuda)}</div>
-      </div>}
+      {deuda>0&&<div style={{...S.card,background:'#fef2f2',border:'0.5px solid #fecaca',marginBottom:14,textAlign:'center'}}><div style={{fontSize:11,color:'#991b1b',marginBottom:4}}>Deuda total en cuotas restantes</div><div style={{fontFamily:'var(--fh)',fontSize:26,fontWeight:800,color:'#dc2626'}}>{fmt(deuda)}</div></div>}
       {tarjetas.length===0&&<div style={{textAlign:'center',padding:'50px 0',color:'var(--t3)'}}><div style={{fontSize:44,marginBottom:10}}>💳</div><div style={{fontSize:15,fontWeight:500,color:'var(--t2)',marginBottom:6}}>Sin tarjetas</div><div style={{fontSize:13}}>Tocá + Agregar para empezar</div></div>}
       {tarjetas.map(t=>{const ct=cxT[t.id]||[];const tm=ct.reduce((a,c)=>a+c.montoCuota,0);const isE=exp===t.id;
         return<div key={t.id} style={{marginBottom:14}}>
@@ -809,10 +719,7 @@ function Tarjetas({tarjetas,movs,onAgregar,onEditar,onEliminar}){
                 <button onClick={()=>onEliminar(t.id)} style={{...S.btn,color:'#dc2626',fontSize:13,padding:'7px 10px'}}>✕</button>
               </div>
             </div>
-            {isE&&ct.map(c=><div key={c.id} style={{...S.row,borderBottom:'0.5px solid #f0eeff',borderTop:'0.5px solid #f0eeff',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div><div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>{c.desc}</div><div style={{fontSize:11,color:'var(--t3)'}}>Cuota {c.ca}/{c.cuotas}</div></div>
-              <div style={{fontSize:13,fontWeight:700,color:'#dc2626'}}>{fmt(c.montoCuota)}</div>
-            </div>)}
+            {isE&&ct.map(c=><div key={c.id} style={{...S.row,borderBottom:'0.5px solid #f0eeff',borderTop:'0.5px solid #f0eeff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>{c.desc}</div><div style={{fontSize:11,color:'var(--t3)'}}>Cuota {c.ca}/{c.cuotas}</div></div><div style={{fontSize:13,fontWeight:700,color:'#dc2626'}}>{fmt(c.montoCuota)}</div></div>)}
           </div>
         </div>;
       })}
@@ -837,15 +744,8 @@ function GastosFijos({fijos,pagos,setPagos,onAgregar,onEditar,onEliminar}){
       <button onClick={onAgregar} style={{...S.btn,background:'var(--primary)',color:'#fff',border:'none',fontWeight:700}}>+ Agregar</button>
     </div>
     <div style={{padding:'14px 14px 0'}}>
-      <div style={{display:'flex',gap:8,marginBottom:14}}>
-        {[['Total',totF,'var(--text)'],['Pagado',totP,'#16a34a'],['Pendiente',totPend,'#d97706']].map(([l,v,c])=><div key={l} style={{flex:1,...S.card2,textAlign:'center',padding:'10px 6px'}}>
-          <div style={{fontSize:9,color:'var(--t2)',marginBottom:3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{l}</div>
-          <div style={{fontFamily:'var(--fn)',fontSize:14,fontWeight:700,color:c,letterSpacing:'-0.01em'}}>{fmt(v)}</div>
-        </div>)}
-      </div>
-      <div style={{display:'flex',gap:6,marginBottom:12}}>
-        {[['todos','Todos'],['personal','Personal'],['negocio','Negocio']].map(([v,l])=><button key={v} onClick={()=>setFiltro(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtro===v?'var(--primary)':'var(--border)'}`,background:filtro===v?'var(--pdim)':'transparent',color:filtro===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}
-      </div>
+      <div style={{display:'flex',gap:8,marginBottom:14}}>{[['Total',totF,'var(--text)'],['Pagado',totP,'#16a34a'],['Pendiente',totPend,'#d97706']].map(([l,v,c])=><div key={l} style={{flex:1,...S.card2,textAlign:'center',padding:'10px 6px'}}><div style={{fontSize:9,color:'var(--t2)',marginBottom:3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{l}</div><div style={{fontFamily:'var(--fn)',fontSize:14,fontWeight:700,color:c}}>{fmt(v)}</div></div>)}</div>
+      <div style={{display:'flex',gap:6,marginBottom:12}}>{[['todos','Todos'],['personal','Personal'],['negocio','Negocio']].map(([v,l])=><button key={v} onClick={()=>setFiltro(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtro===v?'var(--primary)':'var(--border)'}`,background:filtro===v?'var(--pdim)':'transparent',color:filtro===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}</div>
       {lista.length===0&&<div style={{textAlign:'center',padding:'30px 0',color:'var(--t3)',fontSize:14}}>Sin gastos fijos</div>}
       {lista.map(f=>{const pag=!!pagMes.find(p=>p.gastoFijoId===f.id);const d=getD(f);
         return<div key={f.id} style={{...S.card,marginBottom:10,borderLeft:`3px solid ${bc(f,pag)}`,opacity:pag?0.8:1}}>
@@ -871,21 +771,16 @@ function GastosFijos({fijos,pagos,setPagos,onAgregar,onEditar,onEliminar}){
 /* ══ ARQUEO ══ */
 function Arqueo({movs,onVolver}){
   const anio=new Date().getFullYear();
-  const[efectivoReal,setEfectivoReal]=useState('');
-  const[mostrarRes,setMostrarRes]=useState(false);
-
+  const[efectivoReal,setEfectivoReal]=useState('');const[mostrarRes,setMostrarRes]=useState(false);
   const movAnio=movs.filter(m=>m.fecha&&m.fecha.startsWith(anio));
   const ingAnio=movAnio.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);
   const gasAnio=movAnio.filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);
   const cuotasAnio=movs.filter(m=>m.tipo==='cuota'&&(m.venc||[]).some(v=>v.startsWith(anio)));
   const totCuotas=cuotasAnio.reduce((a,m)=>a+m.montoCuota*(m.venc||[]).filter(v=>v.startsWith(anio)).length,0);
   const balanceAnio=ingAnio-gasAnio-totCuotas;
-
   const meses={};
   movAnio.forEach(m=>{const mes=m.fecha.slice(0,7);if(!meses[mes])meses[mes]={ing:0,gas:0};if(m.tipo==='ingreso')meses[mes].ing+=m.monto;else meses[mes].gas+=m.monto;});
-
   const diferencia=efectivoReal?Number(efectivoReal)-balanceAnio:null;
-
   return<div style={S.scr}>
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
@@ -898,39 +793,24 @@ function Arqueo({movs,onVolver}){
         <div style={{fontSize:'0.65rem',color:'var(--primary)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Balance acumulado {anio}</div>
         <div style={{fontFamily:'var(--fh)',fontSize:'1.7rem',fontWeight:800,color:balanceAnio>=0?'var(--success)':'var(--danger)',marginBottom:10}}>{fmt(balanceAnio)}</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div style={{background:'var(--card)',borderRadius:10,padding:'8px 10px',border:'0.5px solid var(--sborder)'}}>
-            <div style={{fontSize:'0.65rem',color:'var(--success)',fontWeight:700,marginBottom:2}}>↑ INGRESOS</div>
-            <div style={{fontFamily:'var(--fh)',fontSize:'0.95rem',fontWeight:800,color:'var(--success)'}}>{fmt(ingAnio)}</div>
-          </div>
-          <div style={{background:'var(--card)',borderRadius:10,padding:'8px 10px',border:'0.5px solid var(--dborder)'}}>
-            <div style={{fontSize:'0.65rem',color:'var(--danger)',fontWeight:700,marginBottom:2}}>↓ EGRESOS</div>
-            <div style={{fontFamily:'var(--fh)',fontSize:'0.95rem',fontWeight:800,color:'var(--danger)'}}>{fmt(gasAnio+totCuotas)}</div>
-          </div>
+          <div style={{background:'var(--card)',borderRadius:10,padding:'8px 10px',border:'0.5px solid var(--sborder)'}}><div style={{fontSize:'0.65rem',color:'var(--success)',fontWeight:700,marginBottom:2}}>↑ INGRESOS</div><div style={{fontFamily:'var(--fh)',fontSize:'0.95rem',fontWeight:800,color:'var(--success)'}}>{fmt(ingAnio)}</div></div>
+          <div style={{background:'var(--card)',borderRadius:10,padding:'8px 10px',border:'0.5px solid var(--dborder)'}}><div style={{fontSize:'0.65rem',color:'var(--danger)',fontWeight:700,marginBottom:2}}>↓ EGRESOS</div><div style={{fontFamily:'var(--fh)',fontSize:'0.95rem',fontWeight:800,color:'var(--danger)'}}>{fmt(gasAnio+totCuotas)}</div></div>
         </div>
       </div>
       <div style={{...S.card,marginBottom:12}}>
         <div style={{...S.st,marginBottom:10}}>Mes a mes</div>
-        {Object.entries(meses).sort().map(([mes,v],i,arr)=>{
-          const bal=v.ing-v.gas;
-          return<div key={mes} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<arr.length-1?'0.5px solid var(--border)':'none'}}>
-            <span style={{fontSize:'0.8rem',color:'var(--text)',fontWeight:500}}>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+mes.slice(5)-1]} {mes.slice(0,4)}</span>
-            <div style={{textAlign:'right'}}>
-              <div style={{fontSize:'0.8rem',fontWeight:700,color:bal>=0?'var(--success)':'var(--danger)'}}>{fmt(bal)}</div>
-              <div style={{fontSize:'0.65rem',color:'var(--t3)'}}>{fmt(v.ing)} / {fmt(v.gas)}</div>
-            </div>
-          </div>;
-        })}
+        {Object.entries(meses).sort().map(([mes,v],i,arr)=>{const bal=v.ing-v.gas;return<div key={mes} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<arr.length-1?'0.5px solid var(--border)':'none'}}><span style={{fontSize:'0.8rem',color:'var(--text)',fontWeight:500}}>{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+mes.slice(5)-1]} {mes.slice(0,4)}</span><div style={{textAlign:'right'}}><div style={{fontSize:'0.8rem',fontWeight:700,color:bal>=0?'var(--success)':'var(--danger)'}}>{fmt(bal)}</div><div style={{fontSize:'0.65rem',color:'var(--t3)'}}>{fmt(v.ing)} / {fmt(v.gas)}</div></div></div>;})}
       </div>
       <div style={{...S.card,marginBottom:12}}>
         <div style={{...S.st,marginBottom:10}}>🧾 Arqueo de caja</div>
-        <div style={{fontSize:'0.8rem',color:'var(--t2)',marginBottom:10,lineHeight:1.5}}>Ingresá el dinero real que tenés en mano. La app te dice si cuadra con lo registrado.</div>
+        <div style={{fontSize:'0.8rem',color:'var(--t2)',marginBottom:10,lineHeight:1.5}}>Ingresá el dinero real que tenés en mano para comparar con lo registrado.</div>
         <label style={S.lbl}>Efectivo real $</label>
         <input style={{...S.inpR,marginBottom:10,fontSize:'1rem'}} type="number" inputMode="numeric" value={efectivoReal} onChange={e=>{setEfectivoReal(e.target.value);setMostrarRes(false);}} placeholder="0"/>
         <button style={S.btnP} onClick={()=>setMostrarRes(true)} disabled={!efectivoReal}>Calcular diferencia</button>
         {mostrarRes&&diferencia!==null&&<div style={{marginTop:12,padding:'14px',borderRadius:12,background:Math.abs(diferencia)<100?'var(--sdim)':diferencia>0?'var(--sdim)':'var(--ddim)',border:`0.5px solid ${Math.abs(diferencia)<100?'var(--sborder)':diferencia>0?'var(--sborder)':'var(--dborder)'}`}}>
           <div style={{fontSize:'0.7rem',fontWeight:700,color:diferencia>=0?'var(--success)':'var(--danger)',textTransform:'uppercase',marginBottom:4}}>{Math.abs(diferencia)<100?'✅ Cuadra perfecto':diferencia>0?'⬆️ Tenés de más':'⬇️ Falta dinero'}</div>
           <div style={{fontFamily:'var(--fh)',fontSize:'1.5rem',fontWeight:800,color:diferencia>=0?'var(--success)':'var(--danger)'}}>{diferencia>=0?'+':''}{fmt(diferencia)}</div>
-          <div style={{fontSize:'0.75rem',color:'var(--t2)',marginTop:6}}>Registrado en app: {fmt(balanceAnio)} · Real: {fmt(Number(efectivoReal))}</div>
+          <div style={{fontSize:'0.75rem',color:'var(--t2)',marginTop:6}}>Registrado: {fmt(balanceAnio)} · Real: {fmt(Number(efectivoReal))}</div>
         </div>}
       </div>
     </div>
@@ -938,7 +818,7 @@ function Arqueo({movs,onVolver}){
 }
 
 /* ══ CONFIG ══ */
-function Config({user,onCerrarSesion,dark,setDark,integracion,onSyncLC,onImportar,onExportar,onLimpiar,sincToken,sincImportando,sincUltimaSync,generarSincToken,resetSincToken,importarDesdeReparto}){
+function Config({user,onCerrarSesion,dark,setDark,integracion,onExportar,onImportar,onLimpiar,sincToken,sincImportando,sincUltimaSync,generarSincToken,resetSincToken,importarDesdeReparto}){
   const cambiarPass=async()=>{if(!window.confirm('¿Enviamos un email para cambiar tu contraseña?'))return;await auth.sendPasswordResetEmail(user.email);alert('✅ Email enviado a '+user.email);};
   return<div style={S.scr}>
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}><span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Configuración</span></div>
@@ -951,38 +831,25 @@ function Config({user,onCerrarSesion,dark,setDark,integracion,onSyncLC,onImporta
         <button style={{...S.btn,width:'100%',padding:'11px',fontSize:14,marginBottom:8,textAlign:'center'}} onClick={cambiarPass}>🔑 Cambiar contraseña</button>
         <button style={{...S.btn,width:'100%',padding:'11px',fontSize:14,color:'#dc2626',border:'0.5px solid #fecaca',textAlign:'center'}} onClick={onCerrarSesion}>🚪 Cerrar sesión</button>
       </div>
-      {/* SINCRONIZACIÓN CON APP DE REPARTO */}
       <div style={{...S.card,marginBottom:12}}>
         <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>🔗 Vincular con App de Reparto</div>
-        {!sincToken
-          ?<>
-            <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6,marginBottom:12}}>Generá un código único y pegalo en tu App de Reparto → Config → "Código Emma Control". Los totales del día se enviarán automáticamente.</div>
-            <button style={S.btnP} onClick={generarSincToken}>Generar código de sincronización</button>
-          </>
-          :<>
-            <div style={{fontSize:11,color:'var(--t2)',marginBottom:6,fontWeight:600}}>Tu código de sincronización</div>
-            <div style={{background:'var(--pdim)',border:'1.5px solid var(--pborder)',borderRadius:10,padding:'12px 14px',fontFamily:'monospace',fontSize:22,fontWeight:700,color:'var(--primary)',letterSpacing:'0.2em',textAlign:'center',marginBottom:8}}>{sincToken}</div>
-            <div style={{fontSize:11,color:'var(--t3)',textAlign:'center',marginBottom:12}}>Pegá este código en la App de Reparto → Config → Vincular Emma Control</div>
-            <button style={{...S.btnP,marginBottom:8}} onClick={importarDesdeReparto} disabled={sincImportando}>
-              {sincImportando?<span className="spin">⏳</span>:'📥 Importar movimientos del día'}
-            </button>
-            {sincUltimaSync&&<div style={{fontSize:11,color:'var(--t3)',textAlign:'center',marginBottom:8}}>Última sincronización: {sincUltimaSync}</div>}
-            <button onClick={()=>{if(window.confirm('¿Desvincular? Perdés el código actual.'))resetSincToken();}} style={{...S.btn,width:'100%',padding:'9px',fontSize:12,color:'#dc2626',border:'0.5px solid #fecaca',textAlign:'center'}}>🗑️ Desvincular</button>
-          </>}
+        {!sincToken?<>
+          <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6,marginBottom:12}}>Generá un código único y pegalo en tu App de Reparto para sincronizar los movimientos del día.</div>
+          <button style={S.btnP} onClick={generarSincToken}>Generar código de sincronización</button>
+        </>:<>
+          <div style={{fontSize:11,color:'var(--t2)',marginBottom:6,fontWeight:600}}>Tu código de sincronización</div>
+          <div style={{background:'var(--pdim)',border:'1.5px solid var(--pborder)',borderRadius:10,padding:'12px 14px',fontFamily:'monospace',fontSize:22,fontWeight:700,color:'var(--primary)',letterSpacing:'0.2em',textAlign:'center',marginBottom:8}}>{sincToken}</div>
+          <button style={{...S.btnP,marginBottom:8}} onClick={importarDesdeReparto} disabled={sincImportando}>{sincImportando?<span className="spin">⏳</span>:'📥 Importar movimientos del día'}</button>
+          {sincUltimaSync&&<div style={{fontSize:11,color:'var(--t3)',textAlign:'center',marginBottom:8}}>Última sync: {sincUltimaSync}</div>}
+          <button onClick={()=>{if(window.confirm('¿Desvincular?'))resetSincToken();}} style={{...S.btn,width:'100%',padding:'9px',fontSize:12,color:'#dc2626',border:'0.5px solid #fecaca',textAlign:'center'}}>🗑️ Desvincular</button>
+        </>}
       </div>
-      {/* TEMA */}
       <div style={{...S.card,marginBottom:12}}>
         <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>Apariencia</div>
-        <div style={{display:'flex',gap:8}}>
-          {[['light','☀️ Claro'],['dark','🌙 Oscuro']].map(([v,l])=>{
-            const activo=(v==='dark')===dark;
-            return<button key={v} onClick={()=>setDark(v==='dark')} style={{flex:1,padding:'12px 0',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer',border:`1.5px solid ${activo?'var(--primary)':'var(--border)'}`,background:activo?'var(--pdim)':'transparent',color:activo?'var(--primary)':'var(--t2)',transition:'all 0.2s'}}>{l}</button>;
-          })}
-        </div>
+        <div style={{display:'flex',gap:8}}>{[['light','☀️ Claro'],['dark','🌙 Oscuro']].map(([v,l])=>{const activo=(v==='dark')===dark;return<button key={v} onClick={()=>setDark(v==='dark')} style={{flex:1,padding:'12px 0',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer',border:`1.5px solid ${activo?'var(--primary)':'var(--border)'}`,background:activo?'var(--pdim)':'transparent',color:activo?'var(--primary)':'var(--t2)',transition:'all 0.2s'}}>{l}</button>;})}</div>
       </div>
       <div style={{...S.card,marginBottom:12}}>
         <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>📂 Datos</div>
-        <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6,marginBottom:12}}>☁️ Tus datos se guardan en Firebase. También podés exportar o importar un archivo de respaldo.</div>
         <button style={{...S.btnP,marginBottom:8}} onClick={onExportar}>📥 Exportar datos</button>
         <button style={{...S.btn,width:'100%',padding:'11px',fontSize:14,textAlign:'center',marginBottom:8}} onClick={onImportar}>📤 Importar datos (JSON)</button>
       </div>
@@ -991,20 +858,7 @@ function Config({user,onCerrarSesion,dark,setDark,integracion,onSyncLC,onImporta
         <div style={{fontSize:13,color:'var(--t2)',marginBottom:12,lineHeight:1.5}}>Borra todos los movimientos, tarjetas y pagos. No se puede deshacer.</div>
         <button style={{background:'var(--danger)',color:'#fff',borderRadius:10,padding:'11px',fontSize:14,fontWeight:700,width:'100%',cursor:'pointer',border:'none'}} onClick={onLimpiar}>🗑️ Borrar todos los datos</button>
       </div>
-      <div style={{...S.card,textAlign:'center'}}><div style={{fontFamily:'var(--fh)',fontSize:14,fontWeight:700,color:'var(--t2)',marginBottom:2}}>Emma Control v1.1</div><div style={{fontSize:11,color:'var(--t3)'}}>Emma Soluciones Digitales</div></div>
-    </div>
-  </div>;
-}
-
-/* ══ PANTALLA CUENTA PENDIENTE ══ */
-function PendienteScreen(){
-  return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px',background:'var(--bg)'}}>
-    <div style={{textAlign:'center',maxWidth:320}}>
-      <div style={{fontSize:56,marginBottom:16}}>⏳</div>
-      <div style={{fontFamily:'var(--fh)',fontSize:22,fontWeight:800,color:'var(--text)',marginBottom:8}}>Cuenta pendiente</div>
-      <div style={{fontSize:14,color:'var(--t2)',lineHeight:1.6,marginBottom:24}}>Tu cuenta fue creada correctamente. El administrador debe activarla antes de que puedas ingresar.</div>
-      <div style={{background:'var(--pdim)',border:'1px solid var(--pborder)',borderRadius:12,padding:'14px 16px',fontSize:13,color:'var(--primary)',marginBottom:24}}>📱 Contactá a Emma Soluciones Digitales para activar tu acceso.</div>
-      <button onClick={()=>auth.signOut()} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:10,padding:'11px 24px',fontSize:14,fontWeight:600,color:'var(--t2)',cursor:'pointer'}}>Cerrar sesión</button>
+      <div style={{...S.card,textAlign:'center'}}><div style={{fontFamily:'var(--fh)',fontSize:14,fontWeight:700,color:'var(--t2)',marginBottom:2}}>Emma Control v1.2</div><div style={{fontSize:11,color:'var(--t3)'}}>Emma Soluciones Digitales</div></div>
     </div>
   </div>;
 }
@@ -1015,16 +869,16 @@ function VencidaScreen(){
     <div style={{textAlign:'center',maxWidth:320}}>
       <div style={{fontSize:56,marginBottom:16}}>📅</div>
       <div style={{fontFamily:'var(--fh)',fontSize:22,fontWeight:800,color:'var(--text)',marginBottom:8}}>Licencia vencida</div>
-      <div style={{fontSize:14,color:'var(--t2)',lineHeight:1.6,marginBottom:24}}>Tu período de acceso ha terminado. Contactá al administrador para renovar tu suscripción y volver a ingresar.</div>
-      <div style={{background:'var(--ddim)',border:'1px solid var(--dborder)',borderRadius:12,padding:'14px 16px',fontSize:13,color:'var(--danger)',marginBottom:24}}>
-        📱 Contactá a Emma Soluciones Digitales para renovar tu acceso.
-      </div>
+      <div style={{fontSize:14,color:'var(--t2)',lineHeight:1.6,marginBottom:24}}>Tu período de acceso ha terminado. Contactá al administrador para renovar tu suscripción.</div>
+      <div style={{background:'var(--ddim)',border:'1px solid var(--dborder)',borderRadius:12,padding:'14px 16px',fontSize:13,color:'var(--danger)',marginBottom:24}}>📱 Contactá a Emma Soluciones Digitales para renovar tu acceso.</div>
       <button onClick={()=>auth.signOut()} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:10,padding:'11px 24px',fontSize:14,fontWeight:600,color:'var(--t2)',cursor:'pointer'}}>Cerrar sesión</button>
     </div>
   </div>;
 }
 
-/* ══ APP PRINCIPAL ══ */
+/* ══════════════════════════════════════════
+   APP PRINCIPAL
+══════════════════════════════════════════ */
 function App(){
   const[user,setUser]=useState(undefined);
   const[dark,setDark]=useTema();
@@ -1035,44 +889,31 @@ function App(){
   const[mFijo,setMFijo]=useState(false);const[eFijo,setEFijo]=useState(null);
   const[mEditMov,setMEditMov]=useState(false);const[movEdit,setMovEdit]=useState(null);
 
+  /* ── VERIFICACIÓN DE LICENCIA AL LOGIN ── */
   useEffect(()=>{
     const u=auth.onAuthStateChanged(async u=>{
       if(u){
-        try {
-          const doc = await db.collection('licencias').doc(u.uid).get();
-          if(doc.exists){
-            const datos=doc.data();
-            const estado=datos.estado;
-
-            // 1. Cuenta suspendida por el admin
-            if(estado==='inactivo'){
-              auth.signOut();
-              setUser(null);
+        try{
+          // Buscar licencia por UID del usuario
+          const snap=await db.collection('licencias').where('uid','==',u.uid).limit(1).get();
+          if(!snap.empty){
+            const datos=snap.docs[0].data();
+            // 1. Suspendida
+            if(datos.estado==='inactivo'){
+              auth.signOut();setUser(null);
               alert('Tu cuenta está suspendida. Contactá a Emma Soluciones Digitales.');
               return;
             }
-
-            // 2. Cuenta pendiente de activación
-            if(estado==='pendiente'){
-              setUser('pendiente');
-              return;
-            }
-
-            // 3. Licencia vencida
+            // 2. Vencida
             if(datos.vencimiento){
-              const hoyDate=new Date();
-              hoyDate.setHours(0,0,0,0);
+              const hoyDate=new Date();hoyDate.setHours(0,0,0,0);
               const vencDate=new Date(datos.vencimiento+'T00:00:00');
-              if(vencDate<hoyDate){
-                setUser('vencida');
-                return;
-              }
+              if(vencDate<hoyDate){setUser('vencida');return;}
             }
-
-            // 4. Todo ok → acceso normal
+            // 3. Todo OK → acceso normal
           }
-          // Si no existe el doc → dejar pasar (usuarios de prueba)
-        } catch(e) { /* si falla la verificación, dejar pasar */ }
+          // Sin licencia registrada → igual deja entrar (ej: el propio admin)
+        }catch(e){/* si falla la verificación, dejar pasar */}
       }
       setUser(u||null);
     });
@@ -1086,25 +927,12 @@ function App(){
   const[sincToken,setSincToken]=React.useState(()=>localStorage.getItem('ec_sinc_token')||'');
   const[sincImportando,setSincImportando]=React.useState(false);
   const[sincUltimaSync,setSincUltimaSync]=React.useState(()=>localStorage.getItem('ec_sinc_ultima')||'');
-
-  const generarSincToken=()=>{
-    const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const t=Array.from({length:8},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
-    setSincToken(t);localStorage.setItem('ec_sinc_token',t);
-  };
+  const generarSincToken=()=>{const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const t=Array.from({length:8},()=>chars[Math.floor(Math.random()*chars.length)]).join('');setSincToken(t);localStorage.setItem('ec_sinc_token',t);};
   const resetSincToken=()=>{setSincToken('');localStorage.removeItem('ec_sinc_token');localStorage.removeItem('ec_sinc_ultima');};
   const importarDesdeReparto=async()=>{
-    if(!sincToken||!window.db)return;
-    setSincImportando(true);
-    try{
-      const snap=await window.db.collection('sinc_reparto').doc(sincToken).collection('movimientos').get();
-      if(snap.empty){alert('No hay datos nuevos de la App de Reparto');setSincImportando(false);return;}
-      let nuevos=0;
-      snap.forEach(doc=>{const d=doc.data();if(!movs.find(m=>m.id===d.id)){setMovs(prev=>[...prev,{...d,origen:'reparto'}]);nuevos++;}});
-      const ahora=new Date().toLocaleString('es-AR');
-      setSincUltimaSync(ahora);localStorage.setItem('ec_sinc_ultima',ahora);
-      alert(nuevos>0?'✅ '+nuevos+' movimiento(s) importado(s) de la App de Reparto':'No hay movimientos nuevos');
-    }catch(e){alert('Error al importar: '+e.message);}
+    if(!sincToken||!window.db)return;setSincImportando(true);
+    try{const snap=await window.db.collection('sinc_reparto').doc(sincToken).collection('movimientos').get();if(snap.empty){alert('No hay datos nuevos de la App de Reparto');setSincImportando(false);return;}let nuevos=0;snap.forEach(doc=>{const d=doc.data();if(!movs.find(m=>m.id===d.id)){setMovs(prev=>[...prev,{...d,origen:'reparto'}]);nuevos++;}});const ahora=new Date().toLocaleString('es-AR');setSincUltimaSync(ahora);localStorage.setItem('ec_sinc_ultima',ahora);alert(nuevos>0?'✅ '+nuevos+' movimiento(s) importado(s)':'No hay movimientos nuevos');}
+    catch(e){alert('Error al importar: '+e.message);}
     setSincImportando(false);
   };
 
@@ -1121,63 +949,16 @@ function App(){
   const saveFijo=f=>setFijos(p=>p.find(x=>x.id===f.id)?p.map(x=>x.id===f.id?f:x):[...p,f]);
   const delFijo=id=>{if(window.confirm('¿Eliminar gasto fijo?'))setFijos(p=>p.filter(f=>f.id!==id));};
   const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?'))auth.signOut();};
-
-  const exportarDatos=()=>{
-    const data={movs,tarj,fijos,pagos,exportado:new Date().toISOString()};
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
-    a.download=`emma-control-${hoy()}.json`;a.click();
-  };
-  const importarDatos=()=>{
-    const inp=document.createElement('input');inp.type='file';inp.accept='.json';
-    inp.onchange=e=>{const f=e.target.files[0];if(!f)return;
-      const r=new FileReader();r.onload=async ev=>{
-        try{
-          const d=JSON.parse(ev.target.result);
-          const uid=auth.currentUser?.uid;
-          if(!uid){alert('Tenés que estar logueado');return;}
-          const base=db.collection('users').doc(uid).collection('datos');
-          await Promise.all([
-            base.doc('movimientos').set({items:d.movs||[]}),
-            base.doc('tarjetas').set({items:d.tarj||[]}),
-            base.doc('gastosFijos').set({items:d.fijos||[]}),
-            base.doc('pagosFijos').set({items:d.pagos||[]}),
-          ]);
-          alert('✅ Importados: '+((d.movs||[]).length)+' movimientos, '+((d.fijos||[]).length)+' gastos fijos');
-        }catch(err){alert('❌ Error: '+err.message);}
-      };r.readAsText(f);};inp.click();
-  };
-  const limpiarDatos=async()=>{
-    if(!window.confirm('¿Borrar TODOS los datos? Esto no se puede deshacer.'))return;
-    if(!window.confirm('¿Estás seguro? Se van a perder todos los movimientos, tarjetas y pagos.'))return;
-    const uid=auth.currentUser?.uid;
-    if(uid){
-      const base=db.collection('users').doc(uid).collection('datos');
-      await Promise.all([
-        base.doc('movimientos').set({items:[]}),
-        base.doc('tarjetas').set({items:[]}),
-        base.doc('gastosFijos').set({items:FDEF}),
-        base.doc('pagosFijos').set({items:[]}),
-      ]);
-    }
-    setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);
-    alert('✅ Datos borrados correctamente');
-  };
-
+  const exportarDatos=()=>{const data={movs,tarj,fijos,pagos,exportado:new Date().toISOString()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=`emma-control-${hoy()}.json`;a.click();};
+  const importarDatos=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async ev=>{try{const d=JSON.parse(ev.target.result);const uid=auth.currentUser?.uid;if(!uid){alert('Tenés que estar logueado');return;}const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:d.movs||[]}),base.doc('tarjetas').set({items:d.tarj||[]}),base.doc('gastosFijos').set({items:d.fijos||[]}),base.doc('pagosFijos').set({items:d.pagos||[]})]);alert('✅ Importados: '+((d.movs||[]).length)+' movimientos');}catch(err){alert('❌ Error: '+err.message);}};r.readAsText(f);};inp.click();};
+  const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=auth.currentUser?.uid;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
   const abrirMov=(tipo)=>{setTipoMov(tipo||null);setMMov(true);};
 
-  // ── PANTALLAS DE CARGA Y ESTADOS ESPECIALES ──
-  if(user===undefined)return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}>
-    <div className="spin" style={{fontSize:32}}>⏳</div>
-    <div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Cargando...</div>
-  </div>;
+  // ── PANTALLAS DE ESTADO ──
+  if(user===undefined)return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}><div className="spin" style={{fontSize:32}}>⏳</div><div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Cargando...</div></div>;
   if(!user)return<AuthScreen/>;
-  if(user==='pendiente')return<PendienteScreen/>;
   if(user==='vencida')return<VencidaScreen/>;
-  if(!(rM&&rT&&rF&&rP))return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}>
-    <div className="spin" style={{fontSize:32}}>☁️</div>
-    <div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Sincronizando datos...</div>
-  </div>;
+  if(!(rM&&rT&&rF&&rP))return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}><div className="spin" style={{fontSize:32}}>☁️</div><div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Sincronizando datos...</div></div>;
 
   const render=()=>{switch(pant){
     case'dashboard':return<Dashboard movs={movs} fijos={fijos} pagos={pagos} tarjetas={tarj} onNuevo={()=>abrirMov()} onVerIngresos={()=>setPant('ingresos')} onVerEgresos={()=>setPant('egresos')} onVerArqueo={()=>setPant('arqueo')}/>;
@@ -1187,7 +968,7 @@ function App(){
     case'tarjetas':return<Tarjetas tarjetas={tarj} movs={movs} onAgregar={()=>{setETarj(null);setMTarj(true);}} onEditar={t=>{setETarj(t);setMTarj(true);}} onEliminar={delTarj}/>;
     case'fijos':return<GastosFijos fijos={fijos} pagos={pagos} setPagos={setPagos} onAgregar={()=>{setEFijo(null);setMFijo(true);}} onEditar={f=>{setEFijo(f);setMFijo(true);}} onEliminar={delFijo}/>;
     case'arqueo':return<Arqueo movs={movs} onVolver={()=>setPant('dashboard')}/>;
-    case'config':return<Config user={user} onCerrarSesion={cerrarSesion} dark={dark} setDark={setDark} integracion={integracion} onSyncLC={()=>integracion.importarDesdeLC(setMovs)} onExportar={exportarDatos} onImportar={importarDatos} onLimpiar={limpiarDatos} sincToken={sincToken} sincImportando={sincImportando} sincUltimaSync={sincUltimaSync} generarSincToken={generarSincToken} resetSincToken={resetSincToken} importarDesdeReparto={importarDesdeReparto}/>;
+    case'config':return<Config user={user} onCerrarSesion={cerrarSesion} dark={dark} setDark={setDark} integracion={integracion} onExportar={exportarDatos} onImportar={importarDatos} onLimpiar={limpiarDatos} sincToken={sincToken} sincImportando={sincImportando} sincUltimaSync={sincUltimaSync} generarSincToken={generarSincToken} resetSincToken={resetSincToken} importarDesdeReparto={importarDesdeReparto}/>;
   }};
 
   const navPant=['dashboard','movimientos','tarjetas','fijos','config'];
