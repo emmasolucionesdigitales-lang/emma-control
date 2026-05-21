@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Emma%20Control","short_name":"EmmaControl","start_url":".","display":"standalone","background_color":"%23ffffff","theme_color":"%232563eb"}'>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <meta name="mobile-web-app-capable" content="yes">
@@ -55,6 +56,12 @@
   firebase.initializeApp(firebaseConfig);
   const auth=firebase.auth();
   const db=firebase.firestore(); window.db=db;
+  // Auth anónima para reglas Firestore
+  auth.signInAnonymously().catch(function(){});
+  // Licencias — app-control-de-apps (central)
+  var ecLicApp=firebase.apps.find(function(a){return a.name==='licencias';})||
+    firebase.initializeApp({apiKey:"AIzaSyAFQ4ybqIoVV3rWe1FMjMVUZ-qzLNZbdBk",authDomain:"app-control-de-apps.firebaseapp.com",projectId:"app-control-de-apps",storageBucket:"app-control-de-apps.firebasestorage.app",messagingSenderId:"761424199819",appId:"1:761424199819:web:513eeaf0e54f4e1401d48e"},"licencias");
+  window.dbLicencias=firebase.firestore(ecLicApp);
   window.leerIntegracionLC=function(token,cb){if(!token||!db)return;db.collection('integraciones').doc(token).collection('movs').get().then(function(snap){var movs=[];snap.forEach(function(d){movs.push(d.data());});cb(movs);}).catch(function(e){cb([]);});};
 </script>
 <script type="text/babel">
@@ -150,152 +157,8 @@ function BtnEscala({esc,setEsc}){const orden=['S','M','L','XL'];const sig=()=>{c
 function FAB({onClick}){return<button onClick={onClick} style={{position:'absolute',bottom:80,right:16,width:52,height:52,borderRadius:26,background:'var(--primary)',color:'#fff',fontSize:26,boxShadow:'0 4px 20px rgba(124,58,237,0.4)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99,border:'none',cursor:'pointer'}}>+</button>;}
 function Modal({onClose,title,children}){return<div style={{position:'absolute',inset:0,zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}><div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(6px)'}} onClick={onClose}/><div style={{position:'relative',background:'var(--card)',borderRadius:'22px 22px 0 0',maxHeight:'94%',overflowY:'auto',border:'0.5px solid var(--border)',borderBottom:'none'}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 18px 14px',borderBottom:'0.5px solid var(--border)',position:'sticky',top:0,background:'var(--card)',zIndex:1}}><span style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:700,color:'var(--text)'}}>{title}</span><button onClick={onClose} style={{background:'none',border:'none',color:'var(--t2)',fontSize:22,cursor:'pointer'}}>✕</button></div><div style={{padding:'18px 18px 32px'}}>{children}</div></div></div>;}
 
-/* ══ LOGO SVG ══ */
-const LogoSVG=()=><svg width="64" height="64" viewBox="0 0 76 76" style={{margin:'0 auto 12px',display:'block'}} xmlns="http://www.w3.org/2000/svg"><rect width="76" height="76" rx="18" fill="#ede9fe"/><line x1="19" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="57" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="19" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="57" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><circle cx="17" cy="17" r="8" fill="#8b5cf6"/><circle cx="59" cy="17" r="8" fill="#8b5cf6"/><circle cx="17" cy="59" r="8" fill="#8b5cf6"/><circle cx="59" cy="59" r="8" fill="#8b5cf6"/><circle cx="38" cy="38" r="17" fill="#7c3aed"/><rect x="27" y="31" width="22" height="3.5" rx="1.75" fill="white"/><rect x="27" y="37.5" width="22" height="3.5" rx="1.75" fill="white"/><rect x="27" y="44" width="22" height="3.5" rx="1.75" fill="white"/></svg>;
-
-/* ══════════════════════════════════════════
-   AUTH SCREEN — con activación por código
-══════════════════════════════════════════ */
-function AuthScreen(){
-  const[modo,setModo]=useState('login'); // 'login' | 'activar' | 'forgot'
-  const[paso,setPaso]=useState(1);       // activar: paso 1=código, paso 2=datos
-  // Activación
-  const[codigo,setCodigo]=useState('');
-  const[licDoc,setLicDoc]=useState(null);
-  const[codigoId,setCodigoId]=useState('');
-  // Datos comunes
-  const[nombre,setNombre]=useState('');
-  const[email,setEmail]=useState('');
-  const[pass,setPass]=useState('');
-  const[err,setErr]=useState('');
-  const[ok,setOk]=useState('');
-  const[carg,setCarg]=useState(false);
-
-  const errMsg=e=>{const c=e.code;if(c==='auth/invalid-email')return'Email inválido';if(c==='auth/user-not-found'||c==='auth/invalid-credential')return'Email o contraseña incorrectos';if(c==='auth/wrong-password')return'Contraseña incorrecta';if(c==='auth/email-already-in-use')return'Ya existe una cuenta con ese email';if(c==='auth/weak-password')return'La contraseña debe tener al menos 6 caracteres';return'Error: '+e.message;};
-
-  const cambiarModo=m=>{setModo(m);setErr('');setOk('');setPaso(1);setCodigo('');};
-
-  // ── VALIDAR CÓDIGO ──
-  const validarCodigo=async()=>{
-    const cod=codigo.trim().toUpperCase();
-    if(!cod)return setErr('Ingresá el código de activación');
-    setCarg(true);setErr('');
-    try{
-      const doc=await db.collection('licencias').doc(cod).get();
-      if(!doc.exists){setErr('❌ Código inválido. Verificá con Emma Soluciones Digitales.');setCarg(false);return;}
-      const d=doc.data();
-      if(d.uid&&d.uid!==''){setErr('❌ Este código ya fue utilizado.');setCarg(false);return;}
-      if(d.estado==='inactivo'){setErr('❌ Este código está desactivado. Contactá al administrador.');setCarg(false);return;}
-      setLicDoc(d);setCodigoId(cod);setPaso(2);
-    }catch(e){setErr('Error al validar: '+e.message);}
-    setCarg(false);
-  };
-
-  // ── ACTIVAR CUENTA ──
-  const activar=async()=>{
-    if(!nombre.trim())return setErr('Ingresá tu nombre');
-    if(!email.trim())return setErr('Ingresá tu email');
-    if(!pass||pass.length<6)return setErr('La contraseña debe tener al menos 6 caracteres');
-    setCarg(true);setErr('');
-    try{
-      const r=await auth.createUserWithEmailAndPassword(email.trim(),pass);
-      await r.user.updateProfile({displayName:nombre.trim()});
-      await db.collection('licencias').doc(codigoId).update({
-        uid:r.user.uid,email:email.trim().toLowerCase(),
-        nombre:nombre.trim(),estado:'usado',
-        fechaActivacion:new Date().toISOString()
-      });
-    }catch(e){setErr(errMsg(e));}
-    setCarg(false);
-  };
-
-  // ── LOGIN ──
-  const login=async()=>{setErr('');setCarg(true);try{await auth.signInWithEmailAndPassword(email,pass);}catch(e){setErr(errMsg(e));}setCarg(false);};
-
-  // ── RECUPERAR CONTRASEÑA ──
-  const recuperar=async()=>{if(!email.trim())return setErr('Ingresá tu email');setErr('');setCarg(true);try{await auth.sendPasswordResetEmail(email);setOk('✅ Email enviado. Revisá tu bandeja.');}catch(e){setErr(errMsg(e));}setCarg(false);};
-
-  return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px',overflowY:'auto',background:'var(--bg)'}}>
-    <div style={{textAlign:'center',marginBottom:24}}>
-      <LogoSVG/>
-      <div style={{fontFamily:'var(--fh)',fontSize:24,fontWeight:800,color:'var(--text)'}}>Emma Control</div>
-      <div style={{fontSize:13,color:'var(--t2)',marginTop:4}}>Gestión financiera personal y de negocio</div>
-    </div>
-
-    {/* Tabs principales */}
-    {modo!=='forgot'&&<div style={{display:'flex',background:'var(--card2)',borderRadius:12,padding:4,marginBottom:24,width:'100%',maxWidth:360}}>
-      {[['login','🔑 Ingresar'],['activar','🚀 Activar cuenta']].map(([v,l])=><button key={v} onClick={()=>cambiarModo(v)} style={{flex:1,padding:'9px 6px',borderRadius:10,fontSize:13,fontWeight:600,border:'none',background:modo===v?'var(--card)':'transparent',color:modo===v?'var(--primary)':'var(--t2)',transition:'all 0.2s',cursor:'pointer',boxShadow:modo===v?'0 1px 4px rgba(124,58,237,0.15)':'none'}}>{l}</button>)}
-    </div>}
-
-    <div style={{width:'100%',maxWidth:360}}>
-
-      {/* ── LOGIN ── */}
-      {modo==='login'&&<>
-        <label style={S.lbl}>Email</label>
-        <input style={{...S.inp,marginBottom:12}} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com" autoComplete="email"/>
-        <label style={S.lbl}>Contraseña</label>
-        <input style={{...S.inp,marginBottom:6}} type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==='Enter'&&login()}/>
-        <div style={{textAlign:'right',marginBottom:16}}>
-          <button onClick={()=>cambiarModo('forgot')} style={{background:'none',border:'none',color:'var(--t2)',fontSize:12,cursor:'pointer',textDecoration:'underline'}}>¿Olvidaste tu contraseña?</button>
-        </div>
-        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
-        <button style={S.btnP} onClick={login} disabled={carg}>{carg?<span className="spin">⏳</span>:'Ingresar'}</button>
-      </>}
-
-      {/* ── FORGOT ── */}
-      {modo==='forgot'&&<>
-        <div style={{textAlign:'center',marginBottom:20}}>
-          <div style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:700,marginBottom:6,color:'var(--text)'}}>Recuperar contraseña</div>
-          <div style={{fontSize:13,color:'var(--t2)'}}>Ingresá tu email y te enviamos un link</div>
-        </div>
-        <label style={S.lbl}>Email</label>
-        <input style={{...S.inp,marginBottom:14}} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com"/>
-        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
-        {ok&&<div style={{background:'#f0fdf4',border:'0.5px solid #bbf7d0',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#16a34a',marginBottom:14}}>{ok}</div>}
-        <button style={S.btnP} onClick={recuperar} disabled={carg}>{carg?<span className="spin">⏳</span>:'Enviar email'}</button>
-        <button onClick={()=>cambiarModo('login')} style={{...S.btn,width:'100%',marginTop:10,padding:'11px',textAlign:'center',fontSize:14}}>← Volver al login</button>
-      </>}
-
-      {/* ── ACTIVAR PASO 1: ingresar código ── */}
-      {modo==='activar'&&paso===1&&<>
-        <div style={{background:'var(--pdim)',border:'0.5px solid var(--pborder)',borderRadius:12,padding:'14px 16px',marginBottom:20,fontSize:13,color:'var(--primary)',lineHeight:1.6}}>
-          🔑 Ingresá el código que te proporcionó Emma Soluciones Digitales para activar tu cuenta.
-        </div>
-        <label style={S.lbl}>Código de activación</label>
-        <input
-          style={{...S.inp,marginBottom:16,fontSize:22,fontWeight:700,letterSpacing:'0.2em',textAlign:'center',textTransform:'uppercase'}}
-          value={codigo}
-          onChange={e=>setCodigo(e.target.value.toUpperCase())}
-          placeholder="EC2026-XXXX"
-          maxLength={14}
-          autoCapitalize="characters"
-        />
-        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
-        <button style={S.btnP} onClick={validarCodigo} disabled={carg}>{carg?<span className="spin">⏳</span>:'Validar código →'}</button>
-      </>}
-
-      {/* ── ACTIVAR PASO 2: crear usuario ── */}
-      {modo==='activar'&&paso===2&&<>
-        <div style={{background:'#f0fdf4',border:'0.5px solid #bbf7d0',borderRadius:12,padding:'12px 16px',marginBottom:20}}>
-          <div style={{fontSize:11,color:'#166534',fontWeight:700,marginBottom:3}}>✅ Código válido</div>
-          <div style={{fontSize:14,color:'#16a34a',fontWeight:600}}>{licDoc?.negocio||'Emma Control'}</div>
-          <div style={{fontSize:11,color:'#4ade80',marginTop:2}}>Plan: {licDoc?.plan||'demo'}{licDoc?.vencimiento?` · Vence: ${licDoc.vencimiento}`:''}</div>
-        </div>
-        <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>Ahora creá tu usuario para ingresar:</div>
-        <label style={S.lbl}>Tu nombre</label>
-        <input style={{...S.inp,marginBottom:12}} value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Tu nombre"/>
-        <label style={S.lbl}>Email</label>
-        <input style={{...S.inp,marginBottom:12}} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com"/>
-        <label style={S.lbl}>Contraseña</label>
-        <input style={{...S.inp,marginBottom:16}} type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Mínimo 6 caracteres"/>
-        {err&&<div style={{background:'#fef2f2',border:'0.5px solid #fecaca',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{err}</div>}
-        <button style={S.btnP} onClick={activar} disabled={carg}>{carg?<span className="spin">⏳</span>:'🚀 Activar mi cuenta'}</button>
-        <button onClick={()=>{setPaso(1);setErr('');}} style={{...S.btn,width:'100%',marginTop:10,padding:'11px',textAlign:'center',fontSize:14}}>← Cambiar código</button>
-      </>}
-
-    </div>
-  </div>;
-}
+/* ── HELPERS ANTERIORES (mantenidos para compatibilidad) ── */
+const LogoSVG_old=LogoSVG; // ya definido arriba
 
 /* ══ CALENDARIO ══ */
 function Calendario({movimientos}){
@@ -819,14 +682,14 @@ function Arqueo({movs,onVolver}){
 
 /* ══ CONFIG ══ */
 function Config({user,onCerrarSesion,dark,setDark,integracion,onExportar,onImportar,onLimpiar,sincToken,sincImportando,sincUltimaSync,generarSincToken,resetSincToken,importarDesdeReparto}){
-  const cambiarPass=async()=>{if(!window.confirm('¿Enviamos un email para cambiar tu contraseña?'))return;await auth.sendPasswordResetEmail(user.email);alert('✅ Email enviado a '+user.email);};
+  const cambiarPass=async()=>{if(!window.confirm('¿Enviamos un email para cambiar tu contraseña?'))return;await auth.sendPasswordResetEmail(getLicenciaEC()?.email||'usuario');alert('✅ Email enviado a '+getLicenciaEC()?.email||'usuario');};
   return<div style={S.scr}>
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}><span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Configuración</span></div>
     <div style={{padding:'14px'}}>
       <div style={{...S.card,marginBottom:12}}>
         <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-          <div style={{width:46,height:46,borderRadius:23,background:'#ede9fe',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--fh)',fontSize:18,fontWeight:700,color:'#5b21b6',flexShrink:0}}>{(user.displayName||'U')[0].toUpperCase()}</div>
-          <div><div style={{fontSize:15,fontWeight:600,color:'var(--text)'}}>{user.displayName||'Usuario'}</div><div style={{fontSize:12,color:'var(--t2)'}}>{user.email}</div></div>
+          <div style={{width:46,height:46,borderRadius:23,background:'#ede9fe',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--fh)',fontSize:18,fontWeight:700,color:'#5b21b6',flexShrink:0}}>{(getLicenciaEC()?.negocio||'U')[0].toUpperCase()}</div>
+          <div><div style={{fontSize:15,fontWeight:600,color:'var(--text)'}}>{getLicenciaEC()?.negocio||'Usuario'}</div><div style={{fontSize:12,color:'var(--t2)'}}>{getLicenciaEC()?.email||'usuario'}</div></div>
         </div>
         <button style={{...S.btn,width:'100%',padding:'11px',fontSize:14,marginBottom:8,textAlign:'center'}} onClick={cambiarPass}>🔑 Cambiar contraseña</button>
         <button style={{...S.btn,width:'100%',padding:'11px',fontSize:14,color:'#dc2626',border:'0.5px solid #fecaca',textAlign:'center'}} onClick={onCerrarSesion}>🚪 Cerrar sesión</button>
@@ -871,7 +734,7 @@ function VencidaScreen(){
       <div style={{fontFamily:'var(--fh)',fontSize:22,fontWeight:800,color:'var(--text)',marginBottom:8}}>Licencia vencida</div>
       <div style={{fontSize:14,color:'var(--t2)',lineHeight:1.6,marginBottom:24}}>Tu período de acceso ha terminado. Contactá al administrador para renovar tu suscripción.</div>
       <div style={{background:'var(--ddim)',border:'1px solid var(--dborder)',borderRadius:12,padding:'14px 16px',fontSize:13,color:'var(--danger)',marginBottom:24}}>📱 Contactá a Emma Soluciones Digitales para renovar tu acceso.</div>
-      <button onClick={()=>auth.signOut()} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:10,padding:'11px 24px',fontSize:14,fontWeight:600,color:'var(--t2)',cursor:'pointer'}}>Cerrar sesión</button>
+      <button onClick={()=>localStorage.removeItem('ec_licencia');window.location.reload()} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:10,padding:'11px 24px',fontSize:14,fontWeight:600,color:'var(--t2)',cursor:'pointer'}}>Cerrar sesión</button>
     </div>
   </div>;
 }
@@ -880,7 +743,11 @@ function VencidaScreen(){
    APP PRINCIPAL
 ══════════════════════════════════════════ */
 function App(){
-  const[user,setUser]=useState(undefined);
+  const lic=getLicenciaEC();
+  const[fase,setFase]=useState(()=>{
+    if(!lic||!lic.activado)return 'activacion';
+    return 'pin';
+  });
   const[dark,setDark]=useTema();
   const[esc,setEsc]=useEscala();
   const[pant,setPant]=useState('dashboard');
@@ -889,38 +756,10 @@ function App(){
   const[mFijo,setMFijo]=useState(false);const[eFijo,setEFijo]=useState(null);
   const[mEditMov,setMEditMov]=useState(false);const[movEdit,setMovEdit]=useState(null);
 
-  /* ── VERIFICACIÓN DE LICENCIA AL LOGIN ── */
-  useEffect(()=>{
-    const u=auth.onAuthStateChanged(async u=>{
-      if(u){
-        try{
-          // Buscar licencia por UID del usuario
-          const snap=await db.collection('licencias').where('uid','==',u.uid).limit(1).get();
-          if(!snap.empty){
-            const datos=snap.docs[0].data();
-            // 1. Suspendida
-            if(datos.estado==='inactivo'){
-              auth.signOut();setUser(null);
-              alert('Tu cuenta está suspendida. Contactá a Emma Soluciones Digitales.');
-              return;
-            }
-            // 2. Vencida
-            if(datos.vencimiento){
-              const hoyDate=new Date();hoyDate.setHours(0,0,0,0);
-              const vencDate=new Date(datos.vencimiento+'T00:00:00');
-              if(vencDate<hoyDate){setUser('vencida');return;}
-            }
-            // 3. Todo OK → acceso normal
-          }
-          // Sin licencia registrada → igual deja entrar (ej: el propio admin)
-        }catch(e){/* si falla la verificación, dejar pasar */}
-      }
-      setUser(u||null);
-    });
-    return u;
-  },[]);
+  if(fase==='activacion')return<AuthScreen/>;
+  if(fase==='pin')return<PantallaPinEC pin={lic?.pin} onOk={()=>setFase('app')}/>;
 
-  const uid=user?.uid;
+  const uid=lic?.deviceId||'default';
   const integracion=useIntegracion(uid);
 
   // Sincronización con App de Reparto
@@ -948,16 +787,13 @@ function App(){
   const delTarj=id=>{if(window.confirm('¿Eliminar tarjeta?'))setTarj(p=>p.filter(t=>t.id!==id));};
   const saveFijo=f=>setFijos(p=>p.find(x=>x.id===f.id)?p.map(x=>x.id===f.id?f:x):[...p,f]);
   const delFijo=id=>{if(window.confirm('¿Eliminar gasto fijo?'))setFijos(p=>p.filter(f=>f.id!==id));};
-  const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?'))auth.signOut();};
+  const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?'))localStorage.removeItem('ec_licencia');window.location.reload();};
   const exportarDatos=()=>{const data={movs,tarj,fijos,pagos,exportado:new Date().toISOString()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=`emma-control-${hoy()}.json`;a.click();};
-  const importarDatos=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async ev=>{try{const d=JSON.parse(ev.target.result);const uid=auth.currentUser?.uid;if(!uid){alert('Tenés que estar logueado');return;}const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:d.movs||[]}),base.doc('tarjetas').set({items:d.tarj||[]}),base.doc('gastosFijos').set({items:d.fijos||[]}),base.doc('pagosFijos').set({items:d.pagos||[]})]);alert('✅ Importados: '+((d.movs||[]).length)+' movimientos');}catch(err){alert('❌ Error: '+err.message);}};r.readAsText(f);};inp.click();};
-  const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=auth.currentUser?.uid;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
+  const importarDatos=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async ev=>{try{const d=JSON.parse(ev.target.result);const uid=getLicenciaEC()?.deviceId;if(!uid){alert('Tenés que estar logueado');return;}const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:d.movs||[]}),base.doc('tarjetas').set({items:d.tarj||[]}),base.doc('gastosFijos').set({items:d.fijos||[]}),base.doc('pagosFijos').set({items:d.pagos||[]})]);alert('✅ Importados: '+((d.movs||[]).length)+' movimientos');}catch(err){alert('❌ Error: '+err.message);}};r.readAsText(f);};inp.click();};
+  const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=getLicenciaEC()?.deviceId;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
   const abrirMov=(tipo)=>{setTipoMov(tipo||null);setMMov(true);};
 
   // ── PANTALLAS DE ESTADO ──
-  if(user===undefined)return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}><div className="spin" style={{fontSize:32}}>⏳</div><div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Cargando...</div></div>;
-  if(!user)return<AuthScreen/>;
-  if(user==='vencida')return<VencidaScreen/>;
   if(!(rM&&rT&&rF&&rP))return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}><div className="spin" style={{fontSize:32}}>☁️</div><div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Sincronizando datos...</div></div>;
 
   const render=()=>{switch(pant){
@@ -983,4 +819,33 @@ function App(){
   </>;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-</script></body></html>
+</script>
+  <script>
+  // ── SERVICE WORKER (PWA - funciona sin internet) ──────────────────
+  const EC_SW = `
+    const CACHE = 'ec-v1';
+    self.addEventListener('install', e => { self.skipWaiting(); });
+    self.addEventListener('activate', e => {
+      e.waitUntil(caches.keys().then(keys =>
+        Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      ));
+    });
+    self.addEventListener('fetch', e => {
+      if (e.request.method !== 'GET') return;
+      e.respondWith(
+        caches.match(e.request).then(cached => {
+          const net = fetch(e.request).then(res => {
+            if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+            return res;
+          }).catch(() => cached);
+          return cached || net;
+        })
+      );
+    });
+  `;
+  if ('serviceWorker' in navigator) {
+    const blob = new Blob([EC_SW], { type: 'application/javascript' });
+    navigator.serviceWorker.register(URL.createObjectURL(blob));
+  }
+  </script>
+</body></html>
