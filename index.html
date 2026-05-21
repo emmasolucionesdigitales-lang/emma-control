@@ -161,6 +161,101 @@ function Modal({onClose,title,children}){return<div style={{position:'absolute',
 /* ══ LOGO SVG ══ */
 const LogoSVG=()=><svg width="64" height="64" viewBox="0 0 76 76" style={{margin:'0 auto 12px',display:'block'}} xmlns="http://www.w3.org/2000/svg"><rect width="76" height="76" rx="18" fill="#ede9fe"/><line x1="19" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="57" y1="19" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="19" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><line x1="57" y1="57" x2="38" y2="38" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round"/><circle cx="17" cy="17" r="8" fill="#8b5cf6"/><circle cx="59" cy="17" r="8" fill="#8b5cf6"/><circle cx="17" cy="59" r="8" fill="#8b5cf6"/><circle cx="59" cy="59" r="8" fill="#8b5cf6"/><circle cx="38" cy="38" r="17" fill="#7c3aed"/><rect x="27" y="31" width="22" height="3.5" rx="1.75" fill="white"/><rect x="27" y="37.5" width="22" height="3.5" rx="1.75" fill="white"/><rect x="27" y="44" width="22" height="3.5" rx="1.75" fill="white"/></svg>;
 
+/* ── Helpers licencia Emma Control ── */
+function getDeviceIdEC(){let id=localStorage.getItem('ec_device_id');if(!id){id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('ec_device_id',id);}return id;}
+function getLicenciaEC(){try{return JSON.parse(localStorage.getItem('ec_licencia')||'null');}catch{return null;}}
+
+function AuthScreen(){
+  const[codigo,setCodigo]=useState('');
+  const[celular,setCelular]=useState('');
+  const[email,setEmail]=useState('');
+  const[negocio,setNegocio]=useState('');
+  const[paso,setPaso]=useState(1);
+  const[err,setErr]=useState('');
+  const[carg,setCarg]=useState(false);
+
+  const verificar=async()=>{
+    const cod=codigo.trim().toUpperCase();
+    if(!cod){setErr('Ingresá el código de activación');return;}
+    setCarg(true);setErr('');
+    try{
+      const doc=await window.dbLicencias.collection('licencias').doc(cod).get();
+      if(!doc.exists){setErr('Código inválido. Verificá con Emma Soluciones.');setCarg(false);return;}
+      const d=doc.data();
+      if(d.app&&d.app!=='emma-control'){setErr('Este código no es para Emma Control.');setCarg(false);return;}
+      if(d.estado==='inactivo'){setErr('Licencia desactivada. Contactá al soporte.');setCarg(false);return;}
+      if(d.estado==='usado'&&d.deviceId&&d.deviceId!==getDeviceIdEC()){setErr('Código ya usado en otro dispositivo.');setCarg(false);return;}
+      setPaso(2);
+    }catch(e){setErr('Error de conexión.');}
+    setCarg(false);
+  };
+
+  const activar=async()=>{
+    if(!negocio.trim()||!celular.trim()||!email.trim()){setErr('Completá todos los campos');return;}
+    setCarg(true);setErr('');
+    try{
+      const cod=codigo.trim().toUpperCase();
+      const deviceId=getDeviceIdEC();
+      const snap=await window.dbLicencias.collection('licencias').doc(cod).get();
+      const lic=snap.data();
+      await window.dbLicencias.collection('licencias').doc(cod).update({estado:'usado',deviceId,celular:celular.trim(),email:email.trim(),negocio:negocio.trim(),activadoEn:new Date().toISOString()});
+      localStorage.setItem('ec_licencia',JSON.stringify({codigo:cod,pin:lic.pin,email:email.trim(),celular:celular.trim(),negocio:negocio.trim(),deviceId,activado:true}));
+      window.location.reload();
+    }catch(e){setErr('Error al activar.');}
+    setCarg(false);
+  };
+
+  return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px',background:'var(--bg)',gap:16}}>
+    <LogoSVG/>
+    <div style={{fontFamily:'var(--fh)',fontSize:24,fontWeight:800,color:'var(--text)'}}>Emma Control</div>
+    <div style={{fontSize:13,color:'var(--t2)'}}>Gestión financiera</div>
+    {paso===1&&<>
+      <p style={{fontSize:14,color:'var(--t2)',textAlign:'center',maxWidth:280,margin:0}}>Ingresá el código de activación que recibiste.</p>
+      <input style={{...S.inp,textAlign:'center',fontSize:18,letterSpacing:3,textTransform:'uppercase',maxWidth:300,width:'100%'}} placeholder="EC-XXXX" value={codigo} onChange={e=>setCodigo(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&verificar()}/>
+      {err&&<div style={{color:'#dc2626',fontSize:13}}>{err}</div>}
+      <button style={{...S.btnP,maxWidth:200}} onClick={verificar} disabled={carg}>{carg?'Verificando...':'Continuar →'}</button>
+    </>}
+    {paso===2&&<>
+      <p style={{fontSize:14,color:'#16a34a',textAlign:'center',maxWidth:280,margin:0}}>✓ Código válido. Completá tus datos.</p>
+      <div style={{width:'100%',maxWidth:320,display:'flex',flexDirection:'column',gap:10}}>
+        <div><label style={S.lbl}>Nombre del negocio *</label><input style={S.inp} placeholder="Ej: Mi Negocio" value={negocio} onChange={e=>setNegocio(e.target.value)}/></div>
+        <div><label style={S.lbl}>Celular *</label><input style={S.inp} type="tel" placeholder="3816559001" value={celular} onChange={e=>setCelular(e.target.value)}/></div>
+        <div><label style={S.lbl}>Email *</label><input style={S.inp} type="email" placeholder="tu@email.com" value={email} onChange={e=>setEmail(e.target.value)}/></div>
+      </div>
+      {err&&<div style={{color:'#dc2626',fontSize:13}}>{err}</div>}
+      <button style={{...S.btnP,maxWidth:200}} onClick={activar} disabled={carg}>{carg?'Activando...':'Activar →'}</button>
+    </>}
+  </div>;
+}
+
+function PantallaPinEC({pin,onOk}){
+  const[intento,setIntento]=useState('');
+  const[err,setErr]=useState('');
+  const[intentos,setIntentos]=useState(0);
+  const[bloq,setBloq]=useState(false);
+  const lic=getLicenciaEC();
+  const teclas=[1,2,3,4,5,6,7,8,9,'','0','⌫'];
+  return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20,background:'var(--bg)'}}>
+    <LogoSVG/>
+    <div style={{fontFamily:'var(--fh)',fontSize:20,fontWeight:700,color:'var(--text)'}}>{lic?.negocio||'Emma Control'}</div>
+    <div style={{fontSize:14,color:'var(--t2)'}}>Ingresá tu PIN de acceso</div>
+    <div style={{display:'flex',gap:14}}>{[0,1,2,3].map(i=><div key={i} style={{width:16,height:16,borderRadius:'50%',background:intento.length>i?'var(--primary)':'transparent',border:'2px solid var(--primary)'}}/>)}</div>
+    {err&&<div style={{color:'#dc2626',fontSize:13}}>{err}</div>}
+    {!bloq&&<div style={{display:'grid',gridTemplateColumns:'repeat(3,72px)',gap:10}}>
+      {teclas.map((t,i)=><button key={i} style={{height:60,fontSize:t==='⌫'?18:20,fontWeight:500,borderRadius:12,background:t===''?'transparent':'var(--card)',border:t===''?'none':'0.5px solid var(--border)',color:'var(--text)',cursor:t===''?'default':'pointer',opacity:t===''?0:1}} onClick={()=>{
+        if(t==='')return;
+        if(t==='⌫'){setIntento(v=>v.slice(0,-1));return;}
+        if(intento.length>=4)return;
+        const nv=intento+t;setIntento(nv);
+        if(nv.length===4)setTimeout(()=>{
+          if(nv===String(pin)){setErr('');onOk();}
+          else{setIntento('');setIntentos(prev=>{const n2=prev+1;if(n2>=5){setBloq(true);setErr('Demasiados intentos.');}else setErr('PIN incorrecto ('+String(5-n2)+' restante'+String(5-n2!==1?'s':'')+')');return n2;});}
+        },200);
+      }}>{t}</button>)}
+    </div>}
+  </div>;
+}
+
 /* ══ CALENDARIO ══ */
 function Calendario({movimientos}){
   const hoyStr=hoy();
