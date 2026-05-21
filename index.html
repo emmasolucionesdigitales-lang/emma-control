@@ -734,7 +734,7 @@ function VencidaScreen(){
       <div style={{fontFamily:'var(--fh)',fontSize:22,fontWeight:800,color:'var(--text)',marginBottom:8}}>Licencia vencida</div>
       <div style={{fontSize:14,color:'var(--t2)',lineHeight:1.6,marginBottom:24}}>Tu período de acceso ha terminado. Contactá al administrador para renovar tu suscripción.</div>
       <div style={{background:'var(--ddim)',border:'1px solid var(--dborder)',borderRadius:12,padding:'14px 16px',fontSize:13,color:'var(--danger)',marginBottom:24}}>📱 Contactá a Emma Soluciones Digitales para renovar tu acceso.</div>
-      <button onClick={()=>localStorage.removeItem('ec_licencia');window.location.reload()} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:10,padding:'11px 24px',fontSize:14,fontWeight:600,color:'var(--t2)',cursor:'pointer'}}>Cerrar sesión</button>
+      <button onClick={()=>{localStorage.removeItem('ec_licencia');window.location.reload();}} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:10,padding:'11px 24px',fontSize:14,fontWeight:600,color:'var(--t2)',cursor:'pointer'}}>Cerrar sesión</button>
     </div>
   </div>;
 }
@@ -787,7 +787,7 @@ function App(){
   const delTarj=id=>{if(window.confirm('¿Eliminar tarjeta?'))setTarj(p=>p.filter(t=>t.id!==id));};
   const saveFijo=f=>setFijos(p=>p.find(x=>x.id===f.id)?p.map(x=>x.id===f.id?f:x):[...p,f]);
   const delFijo=id=>{if(window.confirm('¿Eliminar gasto fijo?'))setFijos(p=>p.filter(f=>f.id!==id));};
-  const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?'))localStorage.removeItem('ec_licencia');window.location.reload();};
+  const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?')){localStorage.removeItem('ec_licencia');window.location.reload();}};
   const exportarDatos=()=>{const data={movs,tarj,fijos,pagos,exportado:new Date().toISOString()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=`emma-control-${hoy()}.json`;a.click();};
   const importarDatos=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async ev=>{try{const d=JSON.parse(ev.target.result);const uid=getLicenciaEC()?.deviceId;if(!uid){alert('Tenés que estar logueado');return;}const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:d.movs||[]}),base.doc('tarjetas').set({items:d.tarj||[]}),base.doc('gastosFijos').set({items:d.fijos||[]}),base.doc('pagosFijos').set({items:d.pagos||[]})]);alert('✅ Importados: '+((d.movs||[]).length)+' movimientos');}catch(err){alert('❌ Error: '+err.message);}};r.readAsText(f);};inp.click();};
   const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=getLicenciaEC()?.deviceId;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
