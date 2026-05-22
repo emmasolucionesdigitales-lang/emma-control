@@ -838,12 +838,18 @@ function VencidaScreen(){
 /* ══════════════════════════════════════════
    APP PRINCIPAL
 ══════════════════════════════════════════ */
-function App(){
+function AppWrapper(){
   const lic=getLicenciaEC();
   const[fase,setFase]=useState(()=>{
     if(!lic||!lic.activado)return 'activacion';
     return 'pin';
   });
+  if(fase==='activacion')return<AuthScreen/>;
+  if(fase==='pin')return<PantallaPinEC pin={lic?.pin} onOk={()=>setFase('app')}/>;
+  return<App/>;
+}
+
+function App(){
   const[dark,setDark]=useTema();
   const[esc,setEsc]=useEscala();
   const[pant,setPant]=useState('dashboard');
@@ -852,10 +858,7 @@ function App(){
   const[mFijo,setMFijo]=useState(false);const[eFijo,setEFijo]=useState(null);
   const[mEditMov,setMEditMov]=useState(false);const[movEdit,setMovEdit]=useState(null);
 
-  if(fase==='activacion')return<AuthScreen/>;
-  if(fase==='pin')return<PantallaPinEC pin={lic?.pin} onOk={()=>setFase('app')}/>;
-
-  const uid=lic?.deviceId||'default';
+  const uid=getLicenciaEC()?.deviceId||'default';
   const integracion=useIntegracion(uid);
 
   // Sincronización con App de Reparto
@@ -914,7 +917,7 @@ function App(){
     {mFijo&&<ModalFijo fijo={eFijo} onGuardar={saveFijo} onClose={()=>{setMFijo(false);setEFijo(null);}}/>}
   </>;
 }
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+ReactDOM.createRoot(document.getElementById('root')).render(<AppWrapper/>);
 </script>
   <script>
   // ── SERVICE WORKER (PWA - funciona sin internet) ──────────────────
