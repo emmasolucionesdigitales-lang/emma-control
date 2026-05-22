@@ -575,7 +575,7 @@ function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
       <div style={{background:'#fef2f2',borderRadius:12,padding:'12px 14px',border:'0.5px solid #fecaca',marginBottom:10}}>
         <div style={{fontSize:9,color:'#991b1b',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>Total del mes</div>
         <div style={{fontFamily:'var(--fn)',fontSize:26,fontWeight:700,color:'#dc2626',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
-        <div style={{display:'flex',gap:14,marginTop:4}}><span style={{fontSize:11,color:'#991b1b'}}>Personal <b>{fmt(totP)}</b></span><span style={{fontSize:11,color:'#991b1b'}}><Trabajo <b>{fmt(totN)}</b></span></div>
+        <div style={{display:'flex',gap:14,marginTop:4}}><span style={{fontSize:11,color:'#991b1b'}}>Personal <b>{fmt(totP)}</b></span><span style={{fontSize:11,color:'#991b1b'}}>Trabajo <b>{fmt(totN)}</b></span></div>
       </div>
       <div style={{display:'flex',gap:6}}>{[['todos','Todos'],['personal','Personal'],['negocio','Trabajo']].map(([v,l])=><button key={v} onClick={()=>setFiltEnt(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtEnt===v?'var(--primary)':'var(--border)'}`,background:filtEnt===v?'var(--pdim)':'transparent',color:filtEnt===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}</div>
     </div>
