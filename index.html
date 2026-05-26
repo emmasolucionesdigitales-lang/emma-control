@@ -1130,8 +1130,8 @@ function App(){
     {render()}
     {navPant.includes(pant)&&<Nav act={pant} go={setPant}/>}
     {navPant.includes(pant)&&<BtnEscala esc={esc} setEsc={setEsc}/>}
-    {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} onClose={()=>{setMMov(false);setTipoMov(null);}}/>
-    {showInforme&&<ModalInforme movs={movs} onClose={()=>setShowInforme(false)}/>}}
+    {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} onClose={()=>{setMMov(false);setTipoMov(null);}}/>}
+    {showInforme&&<ModalInforme movs={movs} onClose={()=>setShowInforme(false)}/>}
     {mEditMov&&movEdit&&<ModalEditMov mov={movEdit} tarjetas={tarj} onGuardar={actualizarMov} onClose={()=>{setMEditMov(false);setMovEdit(null);}}/>}
     {mTarj&&<ModalTarj tarjeta={eTarj} onGuardar={saveTarj} onClose={()=>{setMTarj(false);setETarj(null);}}/>}
     {mFijo&&<ModalFijo fijo={eFijo} onGuardar={saveFijo} onClose={()=>{setMFijo(false);setEFijo(null);}}/>}
