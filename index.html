@@ -127,6 +127,7 @@ function useIntegracion(uid){
 
 /* ══ TEMA ══ */
 function useTema(){
+  const[showInforme,setShowInforme]=useState(false);
   const[dark,setDark]=useState(()=>localStorage.getItem('ec_tema')==='dark');
   useEffect(()=>{document.documentElement.classList.toggle('dark',dark);localStorage.setItem('ec_tema',dark?'dark':'light');},[dark]);
   return[dark,setDark];
@@ -164,6 +165,53 @@ const LogoSVG=()=><svg width="64" height="64" viewBox="0 0 76 76" style={{margin
 
 /* ── Helpers licencia Emma Control ── */
 function getDeviceIdEC(){let id=localStorage.getItem('ec_device_id');if(!id){id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('ec_device_id',id);}return id;}
+
+  // ── Brevo email ─────────────────────────────────────────────────
+  var BREVO_KEY_APP = "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";
+  // ── Resumen diario ────────────────────────────────────────────────
+  window.enviarResumenDiario_ec_licencia = async function(resumen) {
+    // resumen: { fecha, totalIngresos, totalGastos, ganancia, detalle:[] }
+    const lic = (()=>{ try{ return JSON.parse(localStorage.getItem('ec_licencia')||'{}'); }catch{return{};} })();
+    if(!lic.email) return false;
+    const fmt = n => '$' + Math.round(Number(n)||0).toLocaleString('es-AR');
+    const fila = (l,v,c) => `<tr><td style="padding:7px 0;color:#555;border-bottom:1px solid #eee">${l}</td><td style="text-align:right;font-weight:600;color:${c||'#222'};border-bottom:1px solid #eee">${v}</td></tr>`;
+    const det = (resumen.detalle||[]).map(d=>fila(d.label, fmt(d.monto), d.color)).join('');
+    const html = `
+      <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;background:#f9fafb">
+        <div style="background:#5b21b6;border-radius:12px 12px 0 0;padding:20px 24px">
+          <h2 style="color:#fff;margin:0;font-size:18px">📊 Resumen · Emma Control</h2>
+          <p style="color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px">${lic.negocio||''} · ${resumen.fecha||''}</p>
+        </div>
+        <div style="background:#fff;border-radius:0 0 12px 12px;padding:20px 24px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+          <div style="background:#f0f7ff;border-radius:10px;padding:16px;margin-bottom:20px;text-align:center">
+            <div style="font-size:32px;font-weight:800;color:#5b21b6">${fmt(resumen.totalIngresos||0)}</div>
+            <div style="color:#666;font-size:13px">Total del día</div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            ${det}
+            ${resumen.ganancia!==undefined ? fila('<b>💰 Ganancia neta</b>','<b>'+fmt(resumen.ganancia)+'</b>', resumen.ganancia>=0?'#0a7c3e':'#e05c5c') : ''}
+          </table>
+        </div>
+        <p style="color:#aaa;font-size:11px;text-align:center;margin-top:16px">Emma Soluciones Digitales</p>
+      </div>`;
+    return (async ({to, toName, subject, htmlContent})=>{
+    try {
+      const res = await fetch("https://api.brevo.com/v3/smtp/email",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","api-key":BREVO_KEY_APP},
+        body:JSON.stringify({sender:{name:"Emma Soluciones Digitales",email:"carabajalponce1980@gmail.com"},to:[{email:to,name:toName||to}],subject,htmlContent})
+      });
+      return res.ok;
+    } catch(e){ console.error("Brevo:",e); return false; }
+  })({
+      to: lic.email,
+      toName: lic.negocio||'',
+      subject: `📊 Emma Control · ${resumen.fecha||''} · ${fmt(resumen.totalIngresos||0)}`,
+      htmlContent: html
+    });
+  };
+
+
 function getLicenciaEC(){try{return JSON.parse(localStorage.getItem('ec_licencia')||'null');}catch{return null;}}
 
 function AuthScreen(){
@@ -789,7 +837,7 @@ function Arqueo({movs,onVolver}){
 }
 
 /* ══ CONFIG ══ */
-function Config({user,onCerrarSesion,dark,setDark,integracion,onExportar,onImportar,onLimpiar,sincToken,sincImportando,sincUltimaSync,generarSincToken,resetSincToken,importarDesdeReparto}){
+function Config({user,onCerrarSesion,dark,setDark,integracion,onExportar,onImportar,onLimpiar,onInforme,sincToken,sincImportando,sincUltimaSync,generarSincToken,resetSincToken,importarDesdeReparto}){
   const cambiarPass=async()=>{if(!window.confirm('¿Enviamos un email para cambiar tu contraseña?'))return;await auth.sendPasswordResetEmail(getLicenciaEC()?.email||'usuario');alert('✅ Email enviado a '+getLicenciaEC()?.email||'usuario');};
   return<div style={S.scr}>
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}><span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Configuración</span></div>
@@ -828,6 +876,11 @@ function Config({user,onCerrarSesion,dark,setDark,integracion,onExportar,onImpor
         <div style={{fontSize:11,color:'var(--danger)',marginBottom:6,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>⚠️ Zona peligrosa</div>
         <div style={{fontSize:13,color:'var(--t2)',marginBottom:12,lineHeight:1.5}}>Borra todos los movimientos, tarjetas y pagos. No se puede deshacer.</div>
         <button style={{background:'var(--danger)',color:'#fff',borderRadius:10,padding:'11px',fontSize:14,fontWeight:700,width:'100%',cursor:'pointer',border:'none'}} onClick={onLimpiar}>🗑️ Borrar todos los datos</button>
+      <div style={{marginTop:12}}>
+        <button onClick={onInforme} style={{background:'#5b21b6',color:'#ede9fe',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:700,cursor:'pointer',width:'100%'}}>
+          📊 Enviar informe por email
+        </button>
+      </div>
       </div>
       <div style={{...S.card,textAlign:'center'}}><div style={{fontFamily:'var(--fh)',fontSize:14,fontWeight:700,color:'var(--t2)',marginBottom:2}}>Emma Control v1.2</div><div style={{fontSize:11,color:'var(--t3)'}}>Emma Soluciones Digitales</div></div>
     </div>
@@ -860,6 +913,159 @@ function AppWrapper(){
   if(fase==='pin')return<PantallaPinEC pin={lic?.pin} onOk={()=>setFase('app')}/>;
   return<App/>;
 }
+
+
+/* ══ MODAL INFORME ══════════════════════════════════════════════════════ */
+function ModalInforme({movs, onClose}) {
+  const [periodo, setPeriodo]   = React.useState('semana'); // dia | semana | mes
+  const [filtro,  setFiltro]    = React.useState('todos');  // todos | ingreso | egreso
+  const [detalles,setDetalles]  = React.useState(false);
+  const [enviando,setEnviando]  = React.useState(false);
+
+  const hoyDate = new Date();
+  const hoyStr  = hoyDate.toISOString().slice(0,10);
+
+  const getPeriodo = () => {
+    if(periodo==='dia') {
+      return {desde:hoyStr, hasta:hoyStr, label:'Hoy · '+hoyDate.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})};
+    }
+    if(periodo==='semana') {
+      const lun=new Date(hoyDate); lun.setDate(hoyDate.getDate()-hoyDate.getDay()+1);
+      const sab=new Date(lun); sab.setDate(lun.getDate()+6);
+      return {desde:lun.toISOString().slice(0,10), hasta:sab.toISOString().slice(0,10),
+        label:'Esta semana · '+lun.toLocaleDateString('es-AR',{day:'numeric',month:'short'})+' al '+sab.toLocaleDateString('es-AR',{day:'numeric',month:'short'})};
+    }
+    // mes
+    const d1=new Date(hoyDate.getFullYear(),hoyDate.getMonth(),1).toISOString().slice(0,10);
+    const d2=new Date(hoyDate.getFullYear(),hoyDate.getMonth()+1,0).toISOString().slice(0,10);
+    return {desde:d1, hasta:d2, label:hoyDate.toLocaleDateString('es-AR',{month:'long',year:'numeric'})};
+  };
+
+  const {desde, hasta, label} = getPeriodo();
+  const movsFiltrados = (movs||[]).filter(m=>{
+    if(!m.fecha||m.fecha<desde||m.fecha>hasta) return false;
+    if(filtro==='ingreso') return m.tipo==='ingreso';
+    if(filtro==='egreso')  return m.tipo==='gasto'||m.tipo==='egreso';
+    return true;
+  });
+
+  const totalIng = movsFiltrados.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const totalEgr = movsFiltrados.filter(m=>m.tipo!=='ingreso').reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const balance  = totalIng - totalEgr;
+  const fmt = n => '$'+Math.round(Math.abs(Number(n)||0)).toLocaleString('es-AR');
+
+  const enviar = async () => {
+    const lic=(()=>{try{return JSON.parse(localStorage.getItem('ec_licencia')||'{}')}catch{return{}}})();
+    if(!lic.email){alert('No hay email en tu licencia');return;}
+    setEnviando(true);
+    const fila=(l,v,c)=>`<tr><td style="padding:6px 0;color:#555;border-bottom:1px solid #eee;font-size:13px">${l}</td><td style="text-align:right;font-weight:600;color:${c||'#222'};border-bottom:1px solid #eee;font-size:13px">${v}</td></tr>`;
+    const tipoStr = filtro==='ingreso'?'Solo ingresos':filtro==='egreso'?'Solo egresos':'Todos';
+    
+    let detHtml = '';
+    if(detalles) {
+      // Tabla detallada de movimientos
+      detHtml = `<br><div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Detalle de movimientos</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        ${movsFiltrados.sort((a,b)=>a.fecha>b.fecha?-1:1).map(m=>`
+          <tr>
+            <td style="padding:5px 0;border-bottom:1px solid #f0f0f0;color:#777">${m.fecha}</td>
+            <td style="padding:5px 0;border-bottom:1px solid #f0f0f0">${m.desc||''}<br><span style="font-size:10px;color:#999">${m.cat||''}</span></td>
+            <td style="padding:5px 0;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;color:${m.tipo==='ingreso'?'#16a34a':'#e05c5c'}">${m.tipo==='ingreso'?'+':'-'}${fmt(m.monto)}</td>
+          </tr>`).join('')}
+      </table>`;
+    }
+
+    const htmlContent = `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#f9fafb">
+        <div style="background:#5b21b6;border-radius:12px 12px 0 0;padding:20px 24px">
+          <h2 style="color:#fff;margin:0;font-size:18px">📊 Informe Emma Control</h2>
+          <p style="color:rgba(255,255,255,.75);margin:4px 0 0;font-size:13px">${lic.negocio||''} · ${label}</p>
+          <p style="color:rgba(255,255,255,.6);margin:2px 0 0;font-size:11px">${tipoStr} · ${movsFiltrados.length} movimientos</p>
+        </div>
+        <div style="background:#fff;border-radius:0 0 12px 12px;padding:20px 24px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px">
+            ${filtro!=='egreso'?fila('💰 Ingresos',fmt(totalIng),'#16a34a'):''}
+            ${filtro!=='ingreso'?fila('💸 Egresos',fmt(totalEgr),'#e05c5c'):''}
+            ${filtro==='todos'?fila('<b>📊 Balance</b>','<b>'+(balance>=0?'+':'')+fmt(balance)+'</b>',balance>=0?'#16a34a':'#e05c5c'):''}
+          </table>
+          ${detHtml}
+        </div>
+        <p style="color:#aaa;font-size:11px;text-align:center;margin-top:16px">Emma Control · Emma Soluciones Digitales</p>
+      </div>`;
+
+    try {
+      const res = await fetch("https://api.brevo.com/v3/smtp/email",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","api-key":BREVO_KEY_APP},
+        body:JSON.stringify({
+          sender:{name:"Emma Control · Emma Soluciones",email:"carabajalponce1980@gmail.com"},
+          to:[{email:lic.email,name:lic.negocio||lic.email}],
+          subject:`📊 Emma Control · ${label} · Balance ${fmt(balance)}`,
+          htmlContent
+        })
+      });
+      alert(res.ok?'✅ Informe enviado a '+lic.email:'❌ No se pudo enviar');
+    } catch(e) { alert('❌ Error: '+e.message); }
+    setEnviando(false);
+  };
+
+  const S = {
+    overlay:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
+    modal:{background:'var(--card,#1a2535)',borderRadius:16,padding:24,width:'100%',maxWidth:400,maxHeight:'90vh',overflowY:'auto'},
+    h:{fontSize:17,fontWeight:700,color:'var(--text,#e2eaf4)',marginBottom:16},
+    label:{fontSize:11,color:'var(--t2,#7a9ab8)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6,display:'block'},
+    pill:(a)=>({padding:'7px 14px',borderRadius:20,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,
+      background:a?'#5b21b6':'var(--bg3,#253647)',color:a?'#fff':'var(--t2,#7a9ab8)'}),
+    row:{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'},
+    check:{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:16},
+    preview:{background:'var(--bg2,#1a2535)',borderRadius:10,padding:'12px 16px',marginBottom:16},
+    prow:(c)=>({display:'flex',justifyContent:'space-between',fontSize:13,padding:'4px 0',color:c||'var(--text,#e2eaf4)',fontWeight:600}),
+    btn:{width:'100%',padding:14,borderRadius:10,border:'none',background:'#5b21b6',color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',opacity:enviando?0.6:1},
+    btnSec:{width:'100%',padding:11,borderRadius:10,border:'0.5px solid var(--border,rgba(255,255,255,.13))',background:'transparent',color:'var(--t2,#7a9ab8)',fontSize:14,cursor:'pointer',marginTop:8},
+  };
+
+  return (
+    <div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={S.modal}>
+        <div style={S.h}>📊 Enviar informe por email</div>
+
+        <label style={S.label}>Período</label>
+        <div style={S.row}>
+          {[['dia','Hoy'],['semana','Semana'],['mes','Mes']].map(([k,l])=>(
+            <button key={k} style={S.pill(periodo===k)} onClick={()=>setPeriodo(k)}>{l}</button>
+          ))}
+        </div>
+
+        <label style={S.label}>Mostrar</label>
+        <div style={S.row}>
+          {[['todos','Todos'],['ingreso','Solo ingresos'],['egreso','Solo egresos']].map(([k,l])=>(
+            <button key={k} style={S.pill(filtro===k)} onClick={()=>setFiltro(k)}>{l}</button>
+          ))}
+        </div>
+
+        <label style={{...S.check}} onClick={()=>setDetalles(d=>!d)}>
+          <div style={{width:20,height:20,borderRadius:6,border:'2px solid #5b21b6',background:detalles?'#5b21b6':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            {detalles&&<span style={{color:'#fff',fontSize:13}}>✓</span>}
+          </div>
+          <span style={{fontSize:13,color:'var(--text,#e2eaf4)'}}>Incluir detalle de movimientos</span>
+        </label>
+
+        <div style={S.preview}>
+          <div style={{fontSize:11,color:'var(--t2,#7a9ab8)',marginBottom:6}}>{label} · {movsFiltrados.length} movimientos</div>
+          {(filtro==='todos'||filtro==='ingreso')&&<div style={S.prow('#4dd9a0')}>💰 Ingresos <span>{fmt(totalIng)}</span></div>}
+          {(filtro==='todos'||filtro==='egreso')&&<div style={S.prow('#f07070')}>💸 Egresos <span>{fmt(totalEgr)}</span></div>}
+          {filtro==='todos'&&<div style={S.prow(balance>=0?'#4dd9a0':'#f07070')}>📊 Balance <span>{balance>=0?'+':''}{fmt(balance)}</span></div>}
+        </div>
+
+        <button style={S.btn} onClick={enviar} disabled={enviando}>
+          {enviando?'Enviando...':'📧 Enviar informe'}
+        </button>
+        <button style={S.btnSec} onClick={onClose}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+/* ══ FIN MODAL INFORME ════════════════════════════════════════════════ */
 
 function App(){
   const[dark,setDark]=useTema();
@@ -900,6 +1106,7 @@ function App(){
   const delFijo=id=>{if(window.confirm('¿Eliminar gasto fijo?'))setFijos(p=>p.filter(f=>f.id!==id));};
   const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?')){localStorage.removeItem('ec_licencia');window.location.reload();}};
   const exportarDatos=()=>{const data={movs,tarj,fijos,pagos,exportado:new Date().toISOString()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=`emma-control-${hoy()}.json`;a.click();};
+  
   const importarDatos=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async ev=>{try{const d=JSON.parse(ev.target.result);const uid=getLicenciaEC()?.deviceId;if(!uid){alert('Tenés que estar logueado');return;}const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:d.movs||[]}),base.doc('tarjetas').set({items:d.tarj||[]}),base.doc('gastosFijos').set({items:d.fijos||[]}),base.doc('pagosFijos').set({items:d.pagos||[]})]);alert('✅ Importados: '+((d.movs||[]).length)+' movimientos');}catch(err){alert('❌ Error: '+err.message);}};r.readAsText(f);};inp.click();};
   const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=getLicenciaEC()?.deviceId;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
   const abrirMov=(tipo)=>{setTipoMov(tipo||null);setMMov(true);};
@@ -915,7 +1122,7 @@ function App(){
     case'tarjetas':return<Tarjetas tarjetas={tarj} movs={movs} onAgregar={()=>{setETarj(null);setMTarj(true);}} onEditar={t=>{setETarj(t);setMTarj(true);}} onEliminar={delTarj}/>;
     case'fijos':return<GastosFijos fijos={fijos} pagos={pagos} setPagos={setPagos} onAgregar={()=>{setEFijo(null);setMFijo(true);}} onEditar={f=>{setEFijo(f);setMFijo(true);}} onEliminar={delFijo}/>;
     case'arqueo':return<Arqueo movs={movs} onVolver={()=>setPant('dashboard')}/>;
-    case'config':return<Config user={getLicenciaEC()} onCerrarSesion={cerrarSesion} dark={dark} setDark={setDark} integracion={integracion} onExportar={exportarDatos} onImportar={importarDatos} onLimpiar={limpiarDatos} sincToken={sincToken} sincImportando={sincImportando} sincUltimaSync={sincUltimaSync} generarSincToken={generarSincToken} resetSincToken={resetSincToken} importarDesdeReparto={importarDesdeReparto}/>;
+    case'config':return<Config user={getLicenciaEC()} onCerrarSesion={cerrarSesion} dark={dark} setDark={setDark} integracion={integracion} onExportar={exportarDatos} onImportar={importarDatos} onLimpiar={limpiarDatos} onInforme={()=>setShowInforme(true)} sincToken={sincToken} sincImportando={sincImportando} sincUltimaSync={sincUltimaSync} generarSincToken={generarSincToken} resetSincToken={resetSincToken} importarDesdeReparto={importarDesdeReparto}/>;
   }};
 
   const navPant=['dashboard','movimientos','tarjetas','fijos','config'];
@@ -923,7 +1130,8 @@ function App(){
     {render()}
     {navPant.includes(pant)&&<Nav act={pant} go={setPant}/>}
     {navPant.includes(pant)&&<BtnEscala esc={esc} setEsc={setEsc}/>}
-    {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} onClose={()=>{setMMov(false);setTipoMov(null);}}/>}
+    {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} onClose={()=>{setMMov(false);setTipoMov(null);}}/>
+    {showInforme&&<ModalInforme movs={movs} onClose={()=>setShowInforme(false)}/>}}
     {mEditMov&&movEdit&&<ModalEditMov mov={movEdit} tarjetas={tarj} onGuardar={actualizarMov} onClose={()=>{setMEditMov(false);setMovEdit(null);}}/>}
     {mTarj&&<ModalTarj tarjeta={eTarj} onGuardar={saveTarj} onClose={()=>{setMTarj(false);setETarj(null);}}/>}
     {mFijo&&<ModalFijo fijo={eFijo} onGuardar={saveFijo} onClose={()=>{setMFijo(false);setEFijo(null);}}/>}
