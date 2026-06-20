@@ -21,7 +21,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-    [data-scroll]{-webkit-overflow-scrolling:touch;touch-action:pan-y;}
+    [data-scroll]{-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;}
     :root{
       --bg:#f4f3ff;--bg2:#ffffff;--card:#ffffff;--card2:#f4f3ff;--border:#ddd6fe;
       --primary:#7c3aed;--pdim:rgba(124,58,237,0.09);--pborder:rgba(124,58,237,0.25);
@@ -39,7 +39,7 @@
       --sdim:rgba(22,163,74,0.13);--idim:rgba(37,99,235,0.13);--wdim:rgba(217,119,6,0.15);
       --text:#e2ecff;--t2:#7a93c0;--t3:#3d5278;
     }
-    html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--fb);overflow:hidden;transition:background 0.25s,color 0.25s;}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--fb);overflow:hidden;overscroll-behavior:none;transition:background 0.25s,color 0.25s;}
     #root{height:100%;display:flex;flex-direction:column;max-width:480px;margin:0 auto;position:relative;overflow:hidden;}
     button{cursor:pointer;font-family:var(--fb);border:none;outline:none;}
     input,select{font-family:var(--fb);color:var(--text);}
@@ -57,6 +57,7 @@
   firebase.initializeApp(firebaseConfig);
   const auth=firebase.auth();
   const db=firebase.firestore(); window.db=db;
+  try{db.enablePersistence({synchronizeTabs:true}).catch(function(){});}catch(e){}
   // Auth anónima para reglas Firestore
   auth.signInAnonymously().catch(function(){});
   // Licencias — app-control-de-apps (central)
@@ -90,10 +91,10 @@ function useFirestore(uid,col,init){
 }
 
 /* ══ ESCALA DE TEXTO ══ */
-const ESCALAS={S:12,M:14,L:16,XL:19};
+const ESCALAS={S:0.9,M:1,L:1.15,XL:1.32};
 function useEscala(){
   const[esc,setEsc]=useState(()=>localStorage.getItem('ec_escala')||'M');
-  useEffect(()=>{document.documentElement.style.fontSize=ESCALAS[esc]+'px';localStorage.setItem('ec_escala',esc);},[esc]);
+  useEffect(()=>{document.documentElement.style.fontSize='14px';document.documentElement.style.zoom=ESCALAS[esc];localStorage.setItem('ec_escala',esc);},[esc]);
   return[esc,setEsc];
 }
 
@@ -138,7 +139,7 @@ const CCOLORS=['#1e3a5f','#1a472a','#4a1c40','#7c2d12','#1e3a5f','#065666','#312
 const FDEF=[{id:'f1',nombre:'Luz',monto:0,diaVenc:10,entidad:'personal',cat:'Servicios',activo:true},{id:'f2',nombre:'Gas',monto:0,diaVenc:15,entidad:'personal',cat:'Servicios',activo:true},{id:'f3',nombre:'Agua',monto:0,diaVenc:20,entidad:'personal',cat:'Servicios',activo:true},{id:'f4',nombre:'Teléfono',monto:0,diaVenc:10,entidad:'personal',cat:'Internet/Tel',activo:true},{id:'f5',nombre:'Internet',monto:0,diaVenc:5,entidad:'personal',cat:'Internet/Tel',activo:true}];
 
 const S={
-  scr:{flex:1,overflowY:'auto',overflowX:'hidden',paddingBottom:72,WebkitOverflowScrolling:'touch'},
+  scr:{flex:1,minHeight:0,overflowY:'auto',overflowX:'hidden',paddingBottom:72,WebkitOverflowScrolling:'touch',touchAction:'pan-y',overscrollBehavior:'contain'},
   card:{background:'var(--card)',borderRadius:'var(--r)',padding:'14px 16px',border:'0.5px solid var(--border)'},
   card2:{background:'var(--card2)',borderRadius:12,padding:'10px 12px',border:'0.5px solid var(--border)'},
   btn:{borderRadius:10,padding:'9px 14px',fontSize:13,fontWeight:600,cursor:'pointer',background:'var(--card2)',color:'var(--t2)',border:'0.5px solid var(--border)'},
@@ -153,7 +154,7 @@ const S={
 /* ══ COMPONENTES BASE ══ */
 const ChipP=({t,sm})=><span style={{display:'inline-block',padding:sm?'1px 6px':'2px 9px',borderRadius:20,fontSize:sm?9:11,fontWeight:700,color:t==='personal'?'#5b21b6':'#1e40af',background:t==='personal'?'#ede9fe':'#eff6ff'}}>{t==='personal'?'Personal':'Trabajo'}</span>;
 function Toggle({opts,val,onChange,cm}){return<div style={{display:'flex',gap:6}}>{opts.map(([v,l])=>{const c=cm?.[v]||'var(--primary)',a=val===v;return<button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:'9px 0',borderRadius:10,fontSize:13,fontWeight:600,border:`1.5px solid ${a?c:'var(--border)'}`,background:a?c+'18':'transparent',color:a?c:'var(--t2)',transition:'all 0.15s'}}>{l}</button>})}</div>;}
-function Nav({act,go}){const tabs=[['dashboard','🏠','Inicio'],['movimientos','📋','Gastos'],['tarjetas','💳','Tarjetas'],['fijos','📌','Fijos'],['config','⚙️','Config']];return<nav style={{position:'absolute',bottom:0,left:0,right:0,background:'var(--card)',borderTop:'0.5px solid var(--border)',display:'flex',zIndex:100}}>{tabs.map(([id,ic,lb])=><button key={id} onClick={()=>go(id)} style={{flex:1,padding:'8px 0 6px',background:'none',border:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:2,color:act===id?'var(--primary)':'var(--t3)',transition:'color 0.2s'}}><span style={{fontSize:19}}>{ic}</span><span style={{fontSize:9,fontWeight:700,letterSpacing:'0.05em',textTransform:'uppercase'}}>{lb}</span></button>)}</nav>;}
+function Nav({act,go}){const tabs=[['dashboard','🏠','Inicio'],['movimientos','📋','Gastos'],['tarjetas','💳','Tarjetas'],['fijos','📌','Fijos'],['config','⚙️','Config']];return<nav style={{position:'absolute',bottom:0,left:0,right:0,background:'var(--card)',borderTop:'0.5px solid var(--border)',display:'flex',gap:6,padding:'10px 8px',zIndex:100}}>{tabs.map(([id,ic,lb])=>{const a=act===id;return<button key={id} onClick={()=>go(id)} style={{flex:1,padding:'8px 0 7px',borderRadius:13,border:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer',background:a?'var(--primary)':'var(--card2)',color:a?'#fff':'var(--t3)',boxShadow:a?'0 5px 14px rgba(124,58,237,0.4)':'none',transform:a?'translateY(-2px)':'none',transition:'all 0.2s'}}><span style={{fontSize:18}}>{ic}</span><span style={{fontSize:9,fontWeight:700,letterSpacing:'0.05em',textTransform:'uppercase'}}>{lb}</span></button>;})}</nav>;}
 function BtnEscala({esc,setEsc}){const orden=['S','M','L','XL'];const sig=()=>{const i=orden.indexOf(esc);setEsc(orden[(i+1)%orden.length]);};return<button onClick={sig} style={{position:'absolute',bottom:80,left:16,height:36,borderRadius:18,background:'var(--card)',color:'var(--primary)',fontSize:'0.75rem',fontWeight:700,boxShadow:'0 2px 10px rgba(0,0,0,0.15)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99,border:'1px solid var(--border)',cursor:'pointer',padding:'0 12px',gap:4,letterSpacing:'0.05em'}}>{['S','M','L','XL'].map(s=><span key={s} style={{opacity:s===esc?1:0.3,fontWeight:s===esc?800:500}}>{s}</span>)}</button>;}
 function FAB({onClick}){return<button onClick={onClick} style={{position:'absolute',bottom:80,right:16,width:52,height:52,borderRadius:26,background:'var(--primary)',color:'#fff',fontSize:26,boxShadow:'0 4px 20px rgba(124,58,237,0.4)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99,border:'none',cursor:'pointer'}}>+</button>;}
 function Modal({onClose,title,children}){return<div style={{position:'absolute',inset:0,zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}><div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(6px)'}} onClick={onClose}/><div style={{position:'relative',background:'var(--card)',borderRadius:'22px 22px 0 0',maxHeight:'94%',overflowY:'auto',border:'0.5px solid var(--border)',borderBottom:'none'}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 18px 14px',borderBottom:'0.5px solid var(--border)',position:'sticky',top:0,background:'var(--card)',zIndex:1}}><span style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:700,color:'var(--text)'}}>{title}</span><button onClick={onClose} style={{background:'none',border:'none',color:'var(--t2)',fontSize:22,cursor:'pointer'}}>✕</button></div><div style={{padding:'18px 18px 32px'}}>{children}</div></div></div>;}
@@ -523,8 +524,10 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
           <div style={{fontSize:'0.75rem',color:'var(--t2)',marginTop:1}}>{mlabel(mesK)}</div>
         </div>
         <div style={{textAlign:'right'}}>
-          <div style={{fontSize:'0.6rem',color:'var(--t3)',marginBottom:1}}>Balance del mes</div>
-          <div style={{fontFamily:'var(--fn)',fontSize:'1.15rem',fontWeight:700,color:cb,letterSpacing:'-0.02em'}}>{fmt(balance)}</div>
+          <div style={{display:'inline-block',textAlign:'right',background:balance>=0?'var(--sdim)':'var(--ddim)',border:'1px solid '+(balance>=0?'var(--sborder)':'var(--dborder)'),borderRadius:12,padding:'8px 12px'}}>
+            <div style={{fontSize:'0.58rem',color:'var(--t3)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:3}}>Balance del mes</div>
+            <div style={{fontFamily:'var(--fn)',fontSize:'1.5rem',fontWeight:800,color:cb,letterSpacing:'-0.02em',lineHeight:1}}>{fmt(balance)}</div>
+          </div>
         </div>
       </div>
       <div onClick={onVerArqueo} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'var(--pdim)',borderRadius:10,padding:'8px 12px',border:'0.5px solid var(--pborder)',cursor:'pointer'}}>
@@ -714,10 +717,12 @@ function Movimientos({movs,onNuevo,onEliminar,onEditar}){
 }
 
 /* ══ TARJETAS ══ */
-function Tarjetas({tarjetas,movs,onAgregar,onEditar,onEliminar}){
+function Tarjetas({tarjetas,movs,onAgregar,onEditar,onEliminar,onSaldarCuota,onEliminarCuota}){
   const mes=mk(hoy());const[exp,setExp]=useState(null);
-  const deuda=useMemo(()=>movs.filter(m=>m.tipo==='cuota').reduce((a,m)=>{const r=(m.venc||[]).filter(v=>dh(v)>=0).length;return a+r*m.montoCuota;},0),[movs]);
-  const cxT=useMemo(()=>{const r={};movs.filter(m=>m.tipo==='cuota').forEach(m=>{if(!r[m.tarjetaId])r[m.tarjetaId]=[];const i=(m.venc||[]).findIndex(v=>mk(v)===mes);if(i>=0)r[m.tarjetaId].push({...m,ca:i+1});});return r;},[movs,mes]);
+  const deuda=useMemo(()=>movs.filter(m=>m.tipo==='cuota'&&!m.saldada).reduce((a,m)=>{const r=(m.venc||[]).filter(v=>dh(v)>=0).length;return a+r*m.montoCuota;},0),[movs]);
+  const pendXT=useMemo(()=>{const r={};movs.filter(m=>m.tipo==='cuota'&&!m.saldada).forEach(m=>{const rest=(m.venc||[]).filter(v=>dh(v)>=0).length;if(rest>0){(r[m.tarjetaId]=r[m.tarjetaId]||[]).push({...m,rest,restMonto:rest*m.montoCuota});}});return r;},[movs]);
+  const orphan=useMemo(()=>{const ids=new Set(tarjetas.map(t=>t.id));return movs.filter(m=>m.tipo==='cuota'&&!m.saldada&&!ids.has(m.tarjetaId)).map(m=>{const rest=(m.venc||[]).filter(v=>dh(v)>=0).length;return{...m,rest,restMonto:rest*m.montoCuota};}).filter(m=>m.rest>0);},[movs,tarjetas]);
+  const cxT=useMemo(()=>{const r={};movs.filter(m=>m.tipo==='cuota'&&!m.saldada).forEach(m=>{if(!r[m.tarjetaId])r[m.tarjetaId]=[];const i=(m.venc||[]).findIndex(v=>mk(v)===mes);if(i>=0)r[m.tarjetaId].push({...m,ca:i+1});});return r;},[movs,mes]);
   return<div style={S.scr}>
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
       <span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Tarjetas</span>
@@ -725,8 +730,17 @@ function Tarjetas({tarjetas,movs,onAgregar,onEditar,onEliminar}){
     </div>
     <div style={{padding:'14px 14px 0'}}>
       {deuda>0&&<div style={{...S.card,background:'#fef2f2',border:'0.5px solid #fecaca',marginBottom:14,textAlign:'center'}}><div style={{fontSize:11,color:'#991b1b',marginBottom:4}}>Deuda total en cuotas restantes</div><div style={{fontFamily:'var(--fh)',fontSize:26,fontWeight:800,color:'#dc2626'}}>{fmt(deuda)}</div></div>}
+      {orphan.length>0&&<div style={{...S.card,marginBottom:14,borderLeft:'3px solid #dc2626'}}>
+        <div style={{fontSize:11,color:'var(--t2)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2}}>Cuotas sin tarjeta</div>
+        <div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>Pertenecen a una tarjeta que ya no existe. Saldalas o eliminalas para sacarlas de la deuda.</div>
+        {orphan.map(c=><div key={c.id} style={{...S.row,borderTop:'0.5px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+          <div style={{minWidth:0,flex:1}}><div style={{fontSize:13,fontWeight:500,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.desc||'Cuota'}</div><div style={{fontSize:11,color:'var(--t3)'}}>{c.rest} {c.rest===1?'cuota restante':'cuotas restantes'} · {fmt(c.restMonto)}</div></div>
+          <button onClick={()=>onSaldarCuota(c.id)} style={{...S.btn,fontSize:11,padding:'6px 9px',color:'#16a34a',borderColor:'var(--sborder)',flexShrink:0}}>Saldar</button>
+          <button onClick={()=>onEliminarCuota(c.id)} style={{...S.btn,fontSize:14,padding:'6px 8px',color:'#dc2626',flexShrink:0}}>🗑</button>
+        </div>)}
+      </div>}
       {tarjetas.length===0&&<div style={{textAlign:'center',padding:'50px 0',color:'var(--t3)'}}><div style={{fontSize:44,marginBottom:10}}>💳</div><div style={{fontSize:15,fontWeight:500,color:'var(--t2)',marginBottom:6}}>Sin tarjetas</div><div style={{fontSize:13}}>Tocá + Agregar para empezar</div></div>}
-      {tarjetas.map(t=>{const ct=cxT[t.id]||[];const tm=ct.reduce((a,c)=>a+c.montoCuota,0);const isE=exp===t.id;
+      {tarjetas.map(t=>{const ct=cxT[t.id]||[];const pt=pendXT[t.id]||[];const tm=ct.reduce((a,c)=>a+c.montoCuota,0);const isE=exp===t.id;
         return<div key={t.id} style={{marginBottom:14}}>
           <div style={{background:t.color||'#1e3a5f',borderRadius:16,padding:'18px 20px 16px',marginBottom:4,position:'relative',overflow:'hidden'}}>
             <div style={{position:'absolute',right:-20,top:-20,width:100,height:100,borderRadius:'50%',background:'rgba(255,255,255,0.06)'}}/>
@@ -738,15 +752,15 @@ function Tarjetas({tarjetas,movs,onAgregar,onEditar,onEliminar}){
             </div>
           </div>
           <div style={S.card}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:isE&&ct.length?10:0}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:isE&&pt.length?10:0}}>
               <div><div style={{fontSize:11,color:'var(--t2)',marginBottom:2}}>Este mes</div><div style={{fontFamily:'var(--fh)',fontSize:20,fontWeight:800,color:tm>0?'#dc2626':'var(--t3)'}}>{tm>0?fmt(tm):'$0'}</div></div>
               <div style={{display:'flex',gap:6}}>
-                {ct.length>0&&<button onClick={()=>setExp(isE?null:t.id)} style={{...S.btn,fontSize:11,padding:'6px 10px'}}>{isE?'Ocultar':'Cuotas'}</button>}
+                {pt.length>0&&<button onClick={()=>setExp(isE?null:t.id)} style={{...S.btn,fontSize:11,padding:'6px 10px'}}>{isE?'Ocultar':'Cuotas ('+pt.length+')'}</button>}
                 <button onClick={()=>onEditar(t)} style={{...S.btn,fontSize:13,padding:'7px 10px'}}>✏️</button>
                 <button onClick={()=>onEliminar(t.id)} style={{...S.btn,color:'#dc2626',fontSize:13,padding:'7px 10px'}}>✕</button>
               </div>
             </div>
-            {isE&&ct.map(c=><div key={c.id} style={{...S.row,borderBottom:'0.5px solid #f0eeff',borderTop:'0.5px solid #f0eeff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>{c.desc}</div><div style={{fontSize:11,color:'var(--t3)'}}>Cuota {c.ca}/{c.cuotas}</div></div><div style={{fontSize:13,fontWeight:700,color:'#dc2626'}}>{fmt(c.montoCuota)}</div></div>)}
+            {isE&&pt.map(c=><div key={c.id} style={{...S.row,borderTop:'0.5px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><div style={{minWidth:0,flex:1}}><div style={{fontSize:13,fontWeight:500,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.desc}</div><div style={{fontSize:11,color:'var(--t3)'}}>{c.rest} {c.rest===1?'cuota restante':'cuotas restantes'} · {fmt(c.restMonto)}</div></div><button onClick={()=>onSaldarCuota(c.id)} style={{...S.btn,fontSize:11,padding:'6px 9px',color:'#16a34a',borderColor:'var(--sborder)',flexShrink:0}}>Saldar</button><button onClick={()=>onEliminarCuota(c.id)} style={{...S.btn,fontSize:14,padding:'6px 8px',color:'#dc2626',flexShrink:0}}>🗑</button></div>)}
           </div>
         </div>;
       })}
@@ -816,13 +830,12 @@ function Arqueo({movs,onVolver}){
       </div>
     </div>
     <div style={{padding:'14px 14px 0'}}>
-      <div style={{...S.card,marginBottom:12,background:'var(--pdim)',borderColor:'var(--pborder)'}}>
-        <div style={{fontSize:'0.65rem',color:'var(--primary)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Balance acumulado {anio}</div>
-        <div style={{fontFamily:'var(--fh)',fontSize:'1.7rem',fontWeight:800,color:balanceAnio>=0?'var(--success)':'var(--danger)',marginBottom:10}}>{fmt(balanceAnio)}</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div style={{background:'var(--card)',borderRadius:10,padding:'8px 10px',border:'0.5px solid var(--sborder)'}}><div style={{fontSize:'0.65rem',color:'var(--success)',fontWeight:700,marginBottom:2}}>↑ INGRESOS</div><div style={{fontFamily:'var(--fh)',fontSize:'0.95rem',fontWeight:800,color:'var(--success)'}}>{fmt(ingAnio)}</div></div>
-          <div style={{background:'var(--card)',borderRadius:10,padding:'8px 10px',border:'0.5px solid var(--dborder)'}}><div style={{fontSize:'0.65rem',color:'var(--danger)',fontWeight:700,marginBottom:2}}>↓ EGRESOS</div><div style={{fontFamily:'var(--fh)',fontSize:'0.95rem',fontWeight:800,color:'var(--danger)'}}>{fmt(gasAnio+totCuotas)}</div></div>
+      <div style={{...S.card,marginBottom:12}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+          <div style={{background:'var(--sdim)',borderRadius:12,padding:'13px 12px',border:'0.5px solid var(--sborder)'}}><div style={{fontSize:'0.65rem',color:'var(--success)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.03em',marginBottom:5}}>↑ Ingresos</div><div style={{fontFamily:'var(--fh)',fontSize:'1.35rem',fontWeight:800,color:'var(--success)'}}>{fmt(ingAnio)}</div></div>
+          <div style={{background:'var(--ddim)',borderRadius:12,padding:'13px 12px',border:'0.5px solid var(--dborder)'}}><div style={{fontSize:'0.65rem',color:'var(--danger)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.03em',marginBottom:5}}>↓ Egresos</div><div style={{fontFamily:'var(--fh)',fontSize:'1.35rem',fontWeight:800,color:'var(--danger)'}}>{fmt(gasAnio+totCuotas)}</div></div>
         </div>
+        <div style={{background:'var(--pdim)',border:'1px solid var(--pborder)',borderRadius:12,padding:'12px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{fontSize:'0.65rem',color:'var(--primary)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em'}}>Sobrante {anio}</div><div style={{fontFamily:'var(--fh)',fontSize:'1.5rem',fontWeight:800,color:balanceAnio>=0?'var(--success)':'var(--danger)'}}>{fmt(balanceAnio)}</div></div>
       </div>
       <div style={{...S.card,marginBottom:12}}>
         <div style={{...S.st,marginBottom:10}}>Mes a mes</div>
@@ -1110,7 +1123,7 @@ function App(){
   const actualizarMov=m2=>setMovs(p=>p.map(m=>m.id===m2.id?m2:m));
   const delMov=id=>{if(window.confirm('¿Eliminar este movimiento?'))setMovs(p=>p.filter(m=>m.id!==id));};
   const saveTarj=t=>setTarj(p=>p.find(x=>x.id===t.id)?p.map(x=>x.id===t.id?t:x):[...p,t]);
-  const delTarj=id=>{if(window.confirm('¿Eliminar tarjeta?'))setTarj(p=>p.filter(t=>t.id!==id));};
+  const delTarj=id=>{if(!window.confirm('¿Eliminar tarjeta?'))return;const cq=movs.filter(m=>m.tipo==='cuota'&&m.tarjetaId===id&&!m.saldada&&(m.venc||[]).some(v=>dh(v)>=0));if(cq.length>0&&window.confirm('Esta tarjeta tiene '+cq.length+' compra(s) en cuotas pendientes. ¿Borrar también esas cuotas? (Cancelar = dejarlas en "Cuotas sin tarjeta")')){const ids=new Set(cq.map(c=>c.id));setMovs(p=>p.filter(m=>!ids.has(m.id)));}setTarj(p=>p.filter(t=>t.id!==id));};
   const saveFijo=f=>setFijos(p=>p.find(x=>x.id===f.id)?p.map(x=>x.id===f.id?f:x):[...p,f]);
   const delFijo=id=>{if(window.confirm('¿Eliminar gasto fijo?'))setFijos(p=>p.filter(f=>f.id!==id));};
   const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?')){localStorage.removeItem('ec_licencia');window.location.reload();}};
@@ -1120,6 +1133,20 @@ function App(){
   const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=getLicenciaEC()?.deviceId;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
   const abrirMov=(tipo)=>{setTipoMov(tipo||null);setMMov(true);};
 
+  // ── Atrás del teléfono (gesto lateral / botón): volver a Inicio o cerrar el modal abierto, en vez de salir de la app ──
+  const navRef=useRef({});
+  useEffect(()=>{navRef.current={pant,modal:mMov||mTarj||mFijo||mEditMov||showInforme};});
+  useEffect(()=>{
+    window.history.pushState(null,'');
+    const onPop=()=>{
+      const st=navRef.current;
+      if(st.modal){setMMov(false);setMTarj(false);setMFijo(false);setMEditMov(false);setShowInforme(false);window.history.pushState(null,'');return;}
+      if(st.pant!=='dashboard'){setPant('dashboard');window.history.pushState(null,'');}
+    };
+    window.addEventListener('popstate',onPop);
+    return()=>window.removeEventListener('popstate',onPop);
+  },[]);
+
   // ── PANTALLAS DE ESTADO ──
   if(!(rM&&rT&&rF&&rP))return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}><div className="spin" style={{fontSize:32}}>☁️</div><div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Sincronizando datos...</div></div>;
 
@@ -1128,7 +1155,7 @@ function App(){
     case'ingresos':return<DetalleIngresos movs={movs} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')} onEditar={m=>{setMovEdit(m);setMEditMov(true);}} onEliminar={delMov}/>;
     case'egresos':return<DetalleEgresos movs={movs} tarjetas={tarj} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')} onEditar={m=>{setMovEdit(m);setMEditMov(true);}} onEliminar={delMov}/>;
     case'movimientos':return<Movimientos movs={movs} onNuevo={()=>abrirMov()} onEliminar={delMov} onEditar={m=>{setMovEdit(m);setMEditMov(true);}}/>;
-    case'tarjetas':return<Tarjetas tarjetas={tarj} movs={movs} onAgregar={()=>{setETarj(null);setMTarj(true);}} onEditar={t=>{setETarj(t);setMTarj(true);}} onEliminar={delTarj}/>;
+    case'tarjetas':return<Tarjetas tarjetas={tarj} movs={movs} onAgregar={()=>{setETarj(null);setMTarj(true);}} onEditar={t=>{setETarj(t);setMTarj(true);}} onEliminar={delTarj} onSaldarCuota={id=>{if(window.confirm('¿Marcar esta cuota como saldada? Va a desaparecer de la deuda.'))setMovs(p=>p.map(m=>m.id===id?{...m,saldada:true}:m));}} onEliminarCuota={delMov}/>;
     case'fijos':return<GastosFijos fijos={fijos} pagos={pagos} setPagos={setPagos} onAgregar={()=>{setEFijo(null);setMFijo(true);}} onEditar={f=>{setEFijo(f);setMFijo(true);}} onEliminar={delFijo}/>;
     case'arqueo':return<Arqueo movs={movs} onVolver={()=>setPant('dashboard')}/>;
     case'config':return<Config user={getLicenciaEC()} onCerrarSesion={cerrarSesion} dark={dark} setDark={setDark} integracion={integracion} onExportar={exportarDatos} onImportar={importarDatos} onLimpiar={limpiarDatos} onInforme={()=>setShowInforme(true)} sincToken={sincToken} sincImportando={sincImportando} sincUltimaSync={sincUltimaSync} generarSincToken={generarSincToken} resetSincToken={resetSincToken} importarDesdeReparto={importarDesdeReparto}/>;
@@ -1149,31 +1176,12 @@ function App(){
 ReactDOM.createRoot(document.getElementById('root')).render(<AppWrapper/>);
 </script>
   <script>
-  // ── SERVICE WORKER (PWA - funciona sin internet) ──────────────────
-  const EC_SW = `
-    const CACHE = 'ec-v1';
-    self.addEventListener('install', e => { self.skipWaiting(); });
-    self.addEventListener('activate', e => {
-      e.waitUntil(caches.keys().then(keys =>
-        Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-      ));
-    });
-    self.addEventListener('fetch', e => {
-      if (e.request.method !== 'GET') return;
-      e.respondWith(
-        caches.match(e.request).then(cached => {
-          const net = fetch(e.request).then(res => {
-            if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
-            return res;
-          }).catch(() => cached);
-          return cached || net;
-        })
-      );
-    });
-  `;
+  // ── AUTO-ACTUALIZACIÓN: sin caché de service worker, carga siempre la última versión ──
   if ('serviceWorker' in navigator) {
-    const blob = new Blob([EC_SW], { type: 'application/javascript' });
-    navigator.serviceWorker.register(URL.createObjectURL(blob));
+    navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+  }
+  if (window.caches) {
+    caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
   }
   </script>
 </body></html>
