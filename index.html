@@ -1133,7 +1133,10 @@ function App(){
   const[mFijo,setMFijo]=useState(false);const[eFijo,setEFijo]=useState(null);
   const[mEditMov,setMEditMov]=useState(false);const[movEdit,setMovEdit]=useState(null);
 
-  const uid=getLicenciaEC()?.deviceId||'default';
+  // Login: el ID del usuario autenticado es el dueño de los datos (cada uno ve SOLO lo suyo)
+  const[authUid,setAuthUid]=useState(()=>auth.currentUser?auth.currentUser.uid:null);
+  useEffect(()=>{const unsub=auth.onAuthStateChanged(u=>{if(u){setAuthUid(u.uid);}else{auth.signInAnonymously().catch(console.error);}});return()=>unsub();},[]);
+  const uid=authUid;
   const integracion=useIntegracion(uid);
 
   // Sincronización con App de Reparto
@@ -1164,8 +1167,8 @@ function App(){
   const cerrarSesion=()=>{if(window.confirm('¿Cerrar sesión?')){localStorage.removeItem('ec_licencia');window.location.reload();}};
   const exportarDatos=()=>{const data={movs,tarj,fijos,pagos,exportado:new Date().toISOString()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=`emma-control-${hoy()}.json`;a.click();};
   
-  const importarDatos=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async ev=>{try{const d=JSON.parse(ev.target.result);const uid=getLicenciaEC()?.deviceId;if(!uid){alert('Tenés que estar logueado');return;}const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:d.movs||[]}),base.doc('tarjetas').set({items:d.tarj||[]}),base.doc('gastosFijos').set({items:d.fijos||[]}),base.doc('pagosFijos').set({items:d.pagos||[]})]);alert('✅ Importados: '+((d.movs||[]).length)+' movimientos');}catch(err){alert('❌ Error: '+err.message);}};r.readAsText(f);};inp.click();};
-  const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=getLicenciaEC()?.deviceId;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
+  const importarDatos=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async ev=>{try{const d=JSON.parse(ev.target.result);const uid=auth.currentUser?.uid;if(!uid){alert('Tenés que estar logueado');return;}const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:d.movs||[]}),base.doc('tarjetas').set({items:d.tarj||[]}),base.doc('gastosFijos').set({items:d.fijos||[]}),base.doc('pagosFijos').set({items:d.pagos||[]})]);alert('✅ Importados: '+((d.movs||[]).length)+' movimientos');}catch(err){alert('❌ Error: '+err.message);}};r.readAsText(f);};inp.click();};
+  const limpiarDatos=async()=>{if(!window.confirm('¿Borrar TODOS los datos?'))return;if(!window.confirm('¿Estás seguro? No se puede deshacer.'))return;const uid=auth.currentUser?.uid;if(uid){const base=db.collection('users').doc(uid).collection('datos');await Promise.all([base.doc('movimientos').set({items:[]}),base.doc('tarjetas').set({items:[]}),base.doc('gastosFijos').set({items:FDEF}),base.doc('pagosFijos').set({items:[]})]);} setMovs([]);setTarj([]);setFijos(FDEF);setPagos([]);alert('✅ Datos borrados');};
   const abrirMov=(tipo)=>{setTipoMov(tipo||null);setMMov(true);};
 
   // ── Atrás del teléfono (gesto lateral / botón): volver a Inicio o cerrar el modal abierto, en vez de salir de la app ──
