@@ -64,6 +64,10 @@
   var ecLicApp=firebase.apps.find(function(a){return a.name==='licencias';})||
     firebase.initializeApp({apiKey:"AIzaSyAFQ4ybqIoVV3rWe1FMjMVUZ-qzLNZbdBk",authDomain:"app-control-de-apps.firebaseapp.com",projectId:"app-control-de-apps",storageBucket:"app-control-de-apps.firebasestorage.app",messagingSenderId:"761424199819",appId:"1:761424199819:web:513eeaf0e54f4e1401d48e"},"licencias");
   window.dbLicencias=firebase.firestore(ecLicApp);
+  window.dbLicenciasReady=new Promise(function(resolve){
+    firebase.auth(ecLicApp).onAuthStateChanged(function(u){ if(u) resolve(u.uid); });
+    firebase.auth(ecLicApp).signInAnonymously().catch(function(){ resolve(null); });
+  });
   window.leerIntegracionLC=function(token,cb){if(!token||!db)return;db.collection('integraciones').doc(token).collection('movs').get().then(function(snap){var movs=[];snap.forEach(function(d){movs.push(d.data());});cb(movs);}).catch(function(e){cb([]);});};
 </script>
 <script type="text/babel">
@@ -265,7 +269,8 @@ function AuthScreen(){
       if(lic.email&&lic.email.trim().toLowerCase()!==email.trim().toLowerCase()){setErr('El email no coincide con el registrado. Contactá al administrador.');setCarg(false);return;}
       if(lic.celular&&lic.celular.trim()!==celular.trim()){setErr('El celular no coincide con el registrado. Contactá al administrador.');setCarg(false);return;}
       if(String(lic.pin)!==pinIngresado.trim()){setErr('El PIN no es correcto. Revisá el que te enviaron.');setCarg(false);return;}
-      await window.dbLicencias.collection('licencias').doc(cod).update({estado:'usado',deviceId,celular:celular.trim(),email:email.trim(),negocio:negocio.trim(),aceptoTerminos:true,fechaAceptoTerminos:new Date().toISOString(),activadoEn:new Date().toISOString()});
+      const licUid=window.dbLicenciasReady?await window.dbLicenciasReady:null;
+      await window.dbLicencias.collection('licencias').doc(cod).update({estado:'usado',deviceId,celular:celular.trim(),email:email.trim(),negocio:negocio.trim(),aceptoTerminos:true,fechaAceptoTerminos:new Date().toISOString(),activadoEn:new Date().toISOString(),activadoPorUid:licUid});
       localStorage.setItem('ec_licencia',JSON.stringify({codigo:cod,pin:lic.pin,email:email.trim(),celular:celular.trim(),negocio:negocio.trim(),deviceId,activado:true}));
       // ── Email de activación ──
       try {
