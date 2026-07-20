@@ -228,7 +228,7 @@ function HeaderApp(){
   </div>;
 }
 function Plegable({titulo,defaultOpen,children}){
-  const[abierto,setAbierto]=useState(defaultOpen!==false);
+  const[abierto,setAbierto]=useState(defaultOpen===true);
   return<div style={{...S.card,marginTop:12}}>
     <div onClick={()=>setAbierto(a=>!a)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:abierto?12:0}}>
       <span style={S.st}>{titulo}</span>
@@ -693,10 +693,9 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
         <span style={{fontSize:13,color:'#92400e',fontWeight:500}}>📌 Gastos fijos pendientes</span>
         <span style={{fontFamily:'var(--fn)',fontSize:15,fontWeight:700,color:'#d97706',letterSpacing:'-0.01em'}}>{fmt(totPend)}</span>
       </div>}
-      <Plegable titulo="📅 Calendario" defaultOpen={true}><Calendario movimientos={movs}/></Plegable>
-      <Plegable titulo="📊 Gráficos" defaultOpen={true}><GraficoFinanciero movs={movs}/></Plegable>
-      {venc.length>0&&<div style={{...S.card,marginTop:12}}>
-        <div style={{...S.st,marginBottom:10}}>⚠️ Próximos vencimientos</div>
+      <Plegable titulo="📅 Calendario"><Calendario movimientos={movs}/></Plegable>
+      <Plegable titulo="📊 Gráficos"><GraficoFinanciero movs={movs}/></Plegable>
+      {venc.length>0&&<Plegable titulo="⚠️ Próximos vencimientos">
         {venc.slice(0,4).map((v,i)=><div key={i} style={{...S.row,borderBottom:i<Math.min(venc.length,4)-1?'0.5px solid #f0eeff':'none'}}>
           <div>
             <div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>{v.ico} {v.label}</div>
@@ -704,7 +703,7 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
           </div>
           <div style={{fontWeight:700,fontSize:14,color:v.d<=3?'#dc2626':'var(--text)'}}>{fmt(v.monto)}</div>
         </div>)}
-      </div>}
+      </Plegable>}
     </div>
   </div>;
 }
