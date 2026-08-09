@@ -117,6 +117,7 @@ const uid2=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const dh=f=>{const h=new Date();h.setHours(0,0,0,0);return Math.round((new Date(f+'T12:00:00')-h)/86400000);};
 const addM=(f,n)=>{const d=new Date(f+'T12:00:00');d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,10);};
 const pad=n=>String(n).padStart(2,'0');
+const esRedondeo=desc=>/redondeo/i.test(desc||'');
 
 /* ══ FIREBASE HOOK ══ */
 function useFirestore(uid,col,init){
@@ -454,8 +455,8 @@ function Calendario({movimientos}){
           {ingDia>0&&<span style={{fontSize:11,color:'#16a34a',fontWeight:600}}>↑ {fmt(ingDia)}</span>}
           {gastDia>0&&<span style={{fontSize:11,color:'#dc2626',fontWeight:600}}>↓ {fmt(gastDia)}</span>}
         </div>
-        {movDia.map(mv=><div key={mv.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0',borderBottom:'0.5px solid var(--border)'}}>
-          <span style={{color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'65%'}}>{mv.desc}</span>
+        {movDia.map(mv=><div key={mv.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 6px',borderBottom:'0.5px solid var(--border)',...(esRedondeo(mv.desc)?{background:'rgba(245,158,11,0.15)',borderRadius:6,border:'1px solid #f59e0b',borderBottom:'1px solid #f59e0b'}:{})}}>
+          <span style={{color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'65%'}}>{esRedondeo(mv.desc)&&'🔄 '}{mv.desc}</span>
           <span style={{fontWeight:600,color:mv.tipo==='ingreso'?'#16a34a':'#dc2626',flexShrink:0}}>{mv.tipo==='ingreso'?'+':'-'}{fmt(mv.monto)}</span>
         </div>)}
       </>}
@@ -464,22 +465,29 @@ function Calendario({movimientos}){
 }
 
 /* ══ MODALES ══ */
-function ModalMov({tarjetas,onGuardar,onClose,tipoInicial}){
+function ModalMov({tarjetas,onGuardar,onClose,tipoInicial,catsCustom={},onAddCat}){
   const[tipo,setTipo]=useState(tipoInicial||'gasto');const[ent,setEnt]=useState('negocio');
   const[desc,setDesc]=useState('');const[monto,setMonto]=useState('');const[fecha,setFecha]=useState(hoy());
   const[metodo,setMetodo]=useState('efectivo');const[tid,setTid]=useState(tarjetas[0]?.id||'');
   const[cuotas,setCuotas]=useState(1);const[cat,setCat]=useState('');
-  const cats=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
-  useEffect(()=>setCat(cats[0]||''),[tipo,ent]);
+  const[catOtros,setCatOtros]=useState('');
+  const catsKey=tipo==='ingreso'?'ingreso':ent;
+  const catsBase=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
+  const cats=[...catsBase.filter(c=>c!=='Otros'),...(catsCustom[catsKey]||[]),'Otros'];
+  useEffect(()=>{setCat(cats[0]||'');setCatOtros('');},[tipo,ent]);
   const guardar=()=>{
     if(!desc.trim())return alert('Escribí una descripción');
     if(!monto||Number(monto)<=0)return alert('Ingresá un monto válido');
+    if(cat==='Otros'&&!catOtros.trim())return alert('Escribí el nombre de la nueva categoría');
     const m=Number(monto);
+    const esNuevaCat=cat==='Otros'&&catOtros.trim();
+    const cat_final=esNuevaCat?catOtros.trim():cat;
+    if(esNuevaCat)onAddCat&&onAddCat(catsKey,cat_final);
     if(tipo==='gasto'&&metodo==='tarjeta'&&tid&&cuotas>1){
       const tarj=tarjetas.find(t=>t.id===tid);const mc=Math.round(m/cuotas);
       const venc=Array.from({length:cuotas},(_,i)=>{if(tarj?.diaVenc){const d=new Date(fecha+'T12:00:00');d.setMonth(d.getMonth()+i+1);d.setDate(tarj.diaVenc);return d.toISOString().slice(0,10);}return addM(fecha,i+1);});
-      onGuardar({id:uid2(),tipo:'cuota',ent,desc,montoTotal:m,cuotas,montoCuota:mc,tarjetaId:tid,fecha,cat,venc});
-    }else{onGuardar({id:uid2(),tipo,ent,desc,monto:m,fecha,metodo:tipo==='gasto'?metodo:'',tarjetaId:metodo==='tarjeta'&&tipo==='gasto'?tid:'',cat});}
+      onGuardar({id:uid2(),tipo:'cuota',ent,desc,montoTotal:m,cuotas,montoCuota:mc,tarjetaId:tid,fecha,cat:cat_final,venc});
+    }else{onGuardar({id:uid2(),tipo,ent,desc,monto:m,fecha,metodo:tipo==='gasto'?metodo:'',tarjetaId:metodo==='tarjeta'&&tipo==='gasto'?tid:'',cat:cat_final});}
     onClose();
   };
   const mn=Number(monto)||0;
@@ -493,7 +501,8 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial}){
     <label style={S.lbl}>Fecha</label>
     <input style={{...S.inp,marginBottom:12}} type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/>
     <label style={S.lbl}>Categoría</label>
-    <select style={{...S.inp,marginBottom:12}} value={cat} onChange={e=>setCat(e.target.value)}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+    <select style={{...S.inp,marginBottom:cat==='Otros'?8:12}} value={cat} onChange={e=>{setCat(e.target.value);if(e.target.value!=='Otros')setCatOtros('');}}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+    {cat==='Otros'&&<input style={{...S.inp,marginBottom:12}} value={catOtros} onChange={e=>setCatOtros(e.target.value)} placeholder="Escribí la nueva categoría" autoFocus/>}
     {tipo==='gasto'&&<>
       <label style={S.lbl}>Método de pago</label>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
@@ -519,20 +528,33 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial}){
   </Modal>;
 }
 
-function ModalEditMov({mov,tarjetas,onGuardar,onClose}){
+function ModalEditMov({mov,tarjetas,onGuardar,onClose,catsCustom={},onAddCat}){
   const esCuota=mov.tipo==='cuota';
   const[tipo,setTipo]=useState(esCuota?'gasto':mov.tipo);const[ent,setEnt]=useState(mov.ent||'negocio');
   const[desc,setDesc]=useState(mov.desc||'');const[monto,setMonto]=useState(esCuota?(mov.montoTotal||''):(mov.monto||''));
   const[fecha,setFecha]=useState(mov.fecha||hoy());const[metodo,setMetodo]=useState(mov.metodo||'efectivo');const[cat,setCat]=useState(mov.cat||'');
-  const cats=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
-  const guardar=()=>{if(!desc.trim())return alert('Escribí una descripción');if(!esCuota&&(!monto||Number(monto)<=0))return alert('Ingresá un monto válido');if(esCuota){onGuardar({...mov,desc,fecha,cat,ent});}else{onGuardar({...mov,tipo,ent,desc,monto:Number(monto),fecha,metodo,cat});}onClose();};
+  const[catOtros,setCatOtros]=useState('');
+  const catsKey=tipo==='ingreso'?'ingreso':ent;
+  const catsBase=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
+  const cats=[...catsBase.filter(c=>c!=='Otros'),...(catsCustom[catsKey]||[]),'Otros'];
+  const guardar=()=>{
+    if(!desc.trim())return alert('Escribí una descripción');
+    if(!esCuota&&(!monto||Number(monto)<=0))return alert('Ingresá un monto válido');
+    if(cat==='Otros'&&!catOtros.trim())return alert('Escribí el nombre de la nueva categoría');
+    const esNuevaCat=cat==='Otros'&&catOtros.trim();
+    const cat_final=esNuevaCat?catOtros.trim():cat;
+    if(esNuevaCat)onAddCat&&onAddCat(catsKey,cat_final);
+    if(esCuota){onGuardar({...mov,desc,fecha,cat:cat_final,ent});}else{onGuardar({...mov,tipo,ent,desc,monto:Number(monto),fecha,metodo,cat:cat_final});}
+    onClose();
+  };
   return<Modal onClose={onClose} title="✏️ Editar movimiento">
     {esCuota&&<div style={{background:'#fffbeb',border:'0.5px solid #fde68a',borderRadius:10,padding:'10px 14px',fontSize:12,color:'#92400e',marginBottom:14}}>💳 Es una compra en cuotas. Solo podés editar la descripción, fecha y categoría.</div>}
     {!esCuota&&<><div style={{marginBottom:12}}><Toggle opts={[['gasto','💸 Gasto'],['ingreso','💰 Ingreso']]} val={tipo} onChange={setTipo} cm={{gasto:'var(--danger)',ingreso:'var(--success)'}}/></div><div style={{marginBottom:12}}><Toggle opts={[['personal','👤 Personal'],['negocio','💼 Trabajo']]} val={ent} onChange={setEnt} cm={{personal:'var(--pers)',negocio:'var(--neg)'}}/></div></>}
     <label style={S.lbl}>Descripción</label><input style={{...S.inp,marginBottom:12}} value={desc} onChange={e=>setDesc(e.target.value)}/>
     {!esCuota&&<><label style={S.lbl}>Monto $</label><input style={{...S.inpR,marginBottom:12}} type="number" inputMode="numeric" value={monto} onChange={e=>setMonto(e.target.value)}/></>}
     <label style={S.lbl}>Fecha</label><input style={{...S.inp,marginBottom:12}} type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/>
-    <label style={S.lbl}>Categoría</label><select style={{...S.inp,marginBottom:12}} value={cat} onChange={e=>setCat(e.target.value)}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+    <label style={S.lbl}>Categoría</label><select style={{...S.inp,marginBottom:cat==='Otros'?8:12}} value={cat} onChange={e=>{setCat(e.target.value);if(e.target.value!=='Otros')setCatOtros('');}}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+    {cat==='Otros'&&<input style={{...S.inp,marginBottom:12}} value={catOtros} onChange={e=>setCatOtros(e.target.value)} placeholder="Escribí la nueva categoría" autoFocus/>}
     {!esCuota&&<><label style={S.lbl}>Método de pago</label><div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>{['efectivo','débito','tarjeta','transferencia'].map(mt=><button key={mt} onClick={()=>setMetodo(mt)} style={{padding:'7px 13px',borderRadius:20,border:`1px solid ${metodo===mt?'var(--primary)':'var(--border)'}`,background:metodo===mt?'var(--pdim)':'transparent',color:metodo===mt?'var(--primary)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{mt}</button>)}</div></>}
     <button style={S.btnP} onClick={guardar}>Guardar cambios</button>
   </Modal>;
@@ -748,8 +770,8 @@ function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
           <div style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:800,color:'var(--text)',letterSpacing:'-0.01em'}}>{fechaLarga(dia)}</div>
           <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#16a34a'}}>+{fmt(porDia[dia].reduce((a,m)=>a+m.monto,0))}</div>
         </div>
-        {porDia[dia].map(m=><div key={m.id} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:36,height:36,borderRadius:10,background:'#f0fdf4',border:'0.5px solid #bbf7d0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{icoMetodo[m.metodo]||'💰'}</div>
+        {porDia[dia].map(m=><div key={m.id} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10,...(esRedondeo(m.desc)?{background:'rgba(245,158,11,0.12)',border:'1.5px solid #f59e0b'}:{})}}>
+          <div style={{width:36,height:36,borderRadius:10,background:'#f0fdf4',border:'0.5px solid #bbf7d0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{esRedondeo(m.desc)?'🔄':(icoMetodo[m.metodo]||'💰')}</div>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div></div>
           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
             <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:'#16a34a'}}>+{fmt(m.monto)}</div>
@@ -808,8 +830,8 @@ function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
           <div style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:800,color:'var(--text)',letterSpacing:'-0.01em'}}>{fechaLarga(dia)}</div>
           <div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#dc2626'}}>-{fmt(porDia[dia].reduce((a,m)=>a+m.monto,0))}</div>
         </div>
-        {porDia[dia].map(m=><div key={m.id+(m._nCuota||'')} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:36,height:36,borderRadius:10,background:m._cuota?'#fffbeb':'#fef2f2',border:`0.5px solid ${m._cuota?'#fde68a':'#fecaca'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{m._cuota?'💳':icoMetodo[m.metodo]||'💸'}</div>
+        {porDia[dia].map(m=><div key={m.id+(m._nCuota||'')} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10,...(esRedondeo(m.desc)?{background:'rgba(245,158,11,0.12)',border:'1.5px solid #f59e0b'}:{})}}>
+          <div style={{width:36,height:36,borderRadius:10,background:m._cuota?'#fffbeb':'#fef2f2',border:`0.5px solid ${m._cuota?'#fde68a':'#fecaca'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{esRedondeo(m.desc)?'🔄':(m._cuota?'💳':icoMetodo[m.metodo]||'💸')}</div>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m._cuota?<span style={{fontSize:10,color:'#d97706',fontWeight:600}}>{m._label}</span>:<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div></div>
           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
             <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m._cuota?'#d97706':'#dc2626'}}>-{fmt(m.monto)}</div>
@@ -850,8 +872,8 @@ function Movimientos({movs,onNuevo,onEliminar,onEditar}){
           <div style={{fontFamily:'var(--fh)',fontSize:17,fontWeight:800,color:'var(--text)',letterSpacing:'-0.01em'}}>{fechaLarga(dia)}</div>
           <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>{(()=>{const di=porDia[dia].filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);const dg=porDia[dia].filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);return[di>0&&<span key='i' style={{fontFamily:'var(--fn)',fontSize:12,fontWeight:700,color:'#16a34a'}}>+{fmt(di)}</span>,dg>0&&<span key='g' style={{fontFamily:'var(--fn)',fontSize:12,fontWeight:700,color:'#dc2626'}}>-{fmt(dg)}</span>];})()}</div>
         </div>
-        {porDia[dia].map(m=><div key={m.id} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:36,height:36,borderRadius:10,background:m.tipo==='ingreso'?'#f0fdf4':'#fef2f2',border:`0.5px solid ${m.tipo==='ingreso'?'#bbf7d0':'#fecaca'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{m.tipo==='ingreso'?'💰':icoM[m.metodo]||'💸'}</div>
+        {porDia[dia].map(m=><div key={m.id} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10,...(esRedondeo(m.desc)?{background:'rgba(245,158,11,0.12)',border:'1.5px solid #f59e0b'}:{})}}>
+          <div style={{width:36,height:36,borderRadius:10,background:m.tipo==='ingreso'?'#f0fdf4':'#fef2f2',border:`0.5px solid ${m.tipo==='ingreso'?'#bbf7d0':'#fecaca'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{esRedondeo(m.desc)?'🔄':(m.tipo==='ingreso'?'💰':icoM[m.metodo]||'💸')}</div>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:500,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m.cat&&<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div></div>
           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
             <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m.tipo==='ingreso'?'#16a34a':'#dc2626'}}>{m.tipo==='ingreso'?'+':'-'}{fmt(m.monto)}</div>
@@ -1312,6 +1334,22 @@ function App(){
   const[tarj,setTarj,rT]=useFirestore(uid,'tarjetas',[]);
   const[fijos,setFijos,rF]=useFirestore(uid,'gastosFijos',FDEF);
   const[pagos,setPagos,rP]=useFirestore(uid,'pagosFijos',[]);
+  const[catsCustom,setCatsCustom]=useFirestore(uid,'categoriasCustom',{personal:[],negocio:[],ingreso:[]});
+  const agrCatCustom=useCallback((key,nombre)=>{
+    setCatsCustom(p=>{
+      const arr=p[key]||[];
+      if(arr.some(c=>c.toLowerCase()===nombre.toLowerCase()))return p;
+      return{...p,[key]:[...arr,nombre]};
+    });
+  },[setCatsCustom]);
+
+  // Guarda/actualiza el perfil (email + negocio de la licencia) para que el backup diario por mail sepa a quién mandarlo
+  useEffect(()=>{
+    if(!uid)return;
+    const lic=getLicenciaEC();
+    if(!lic||!lic.email)return;
+    db.collection('users').doc(uid).set({email:lic.email,negocio:lic.negocio||'',actualizado:new Date().toISOString()},{merge:true}).catch(()=>{});
+  },[uid]);
 
   const agrMov=m=>setMovs(p=>[...p,m]);
   const actualizarMov=m2=>setMovs(p=>p.map(m=>m.id===m2.id?m2:m));
@@ -1365,9 +1403,9 @@ function App(){
     <HeaderApp/>
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>{render()}</div>
     {navPant.includes(pant)&&<Nav act={pant} go={setPant} onFab={fabAccion}/>}
-    {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} onClose={()=>{setMMov(false);setTipoMov(null);}}/>}
+    {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} catsCustom={catsCustom} onAddCat={agrCatCustom} onClose={()=>{setMMov(false);setTipoMov(null);}}/>}
     {showInforme&&<ModalInforme movs={movs} onClose={()=>setShowInforme(false)}/>}
-    {mEditMov&&movEdit&&<ModalEditMov mov={movEdit} tarjetas={tarj} onGuardar={actualizarMov} onClose={()=>{setMEditMov(false);setMovEdit(null);}}/>}
+    {mEditMov&&movEdit&&<ModalEditMov mov={movEdit} tarjetas={tarj} onGuardar={actualizarMov} catsCustom={catsCustom} onAddCat={agrCatCustom} onClose={()=>{setMEditMov(false);setMovEdit(null);}}/>}
     {mTarj&&<ModalTarj tarjeta={eTarj} onGuardar={saveTarj} onClose={()=>{setMTarj(false);setETarj(null);}}/>}
     {mFijo&&<ModalFijo fijo={eFijo} onGuardar={saveFijo} onClose={()=>{setMFijo(false);setEFijo(null);}}/>}
   </>;
