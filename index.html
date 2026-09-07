@@ -1641,12 +1641,11 @@ function App(){
 ReactDOM.createRoot(document.getElementById('root')).render(<AppWrapper/>);
 </script>
   <script>
-  // ── AUTO-ACTUALIZACIÓN: sin caché de service worker, carga siempre la última versión ──
+  // Service worker con estrategia "red primero, caché como respaldo": mientras hay conexión
+  // siempre se usa la versión más nueva (igual que antes); sin conexión, se sirve la última
+  // copia guardada — así la app queda disponible offline sin perder el auto-actualizado.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
-  }
-  if (window.caches) {
-    caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+    navigator.serviceWorker.register('sw.js').catch(function(){});
   }
   </script>
 </body></html>
