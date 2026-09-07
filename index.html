@@ -102,7 +102,7 @@
     firebase.auth(ecLicApp).onAuthStateChanged(function(u){ if(u) resolve(u.uid); });
     firebase.auth(ecLicApp).signInAnonymously().catch(function(){ resolve(null); });
   });
-  window.leerIntegracionLC=function(token,cb){if(!token||!db)return;db.collection('integraciones').doc(token).collection('movs').get().then(function(snap){var movs=[];snap.forEach(function(d){movs.push(d.data());});cb(movs);}).catch(function(e){cb([]);});};
+  window.leerIntegracionLC=function(token,cb){if(!token||!db)return;db.collection('integraciones').doc(token).collection('movs').get().then(function(snap){var movs=[];snap.forEach(function(d){var data=d.data();if(!data.id)data.id=d.id;movs.push(data);});cb(movs);}).catch(function(e){cb([]);});};
 </script>
 <script type="text/babel">
 const {useState,useEffect,useMemo,useCallback,useRef}=React;
@@ -118,6 +118,25 @@ const dh=f=>{const h=new Date();h.setHours(0,0,0,0);return Math.round((new Date(
 const addM=(f,n)=>{const d=new Date(f+'T12:00:00');d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,10);};
 const pad=n=>String(n).padStart(2,'0');
 const esRedondeo=desc=>/redondeo/i.test(desc||'');
+// Devuelve el mes calendario siguiente a "mesStr" (formato "YYYY-MM").
+const nextMesKey=mesStr=>{const[y,m]=mesStr.split('-').map(Number);const d=new Date(y,m,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
+// ¿Un gasto fijo ya está pagado en el mes "mes"? Se guarda buscando en "movs" un gasto vinculado
+// (fijoId+fijoMes) — no depende de ninguna colección aparte, así que siempre refleja lo real.
+const fijoPagado=(f,movs,mes)=>(movs||[]).some(m=>m.fijoId===f.id&&m.fijoMes===mes);
+// Encuentra el primer mes (desde fechaRef en adelante) que todavía no esté marcado como pagado
+// para ese fijo — así un pago adelantado (cargado antes del vencimiento) queda en el mes que
+// corresponde y no se "pierde" en el mes de la fecha en la que se cargó.
+const primerMesNoPagado=(f,movs,fechaRef)=>{
+  let mes=mk(fechaRef);
+  for(let i=0;i<12;i++){if(!fijoPagado(f,movs,mes))return mes;mes=nextMesKey(mes);}
+  return mes;
+};
+// Compara el texto de una descripción contra el nombre de un gasto fijo (para detectar que un
+// gasto cargado "suelto" en realidad corresponde a un fijo).
+const coincideFijo=(desc,nombreFijo)=>{
+  const a=(desc||'').toLowerCase().trim(),b=(nombreFijo||'').toLowerCase().trim();
+  return!!a&&!!b&&(a.includes(b)||b.includes(a));
+};
 
 /* ══ FIREBASE HOOK ══ */
 function useFirestore(uid,col,init){
@@ -165,9 +184,18 @@ function useIntegracion(uid){
       const ahora=new Date().toLocaleString('es-AR');
       setUltimaSync(ahora);localStorage.setItem('ec_ultima_sync',ahora);
       setMovs(prev=>{
-        const ids=new Set(prev.map(m=>m.id));
-        const claves=new Set(prev.map(m=>`${m.fecha}|${(m.desc||'').trim().toLowerCase()}|${m.monto}|${m.tipo}`));
-        const nuevos=movs.filter(m=>{if(m.id&&ids.has(m.id))return false;const clave=`${m.fecha}|${(m.desc||'').trim().toLowerCase()}|${m.monto}|${m.tipo}`;return!claves.has(clave);});
+        const ids=new Set(prev.map(m=>m.id).filter(Boolean));
+        const clave=m=>`${m.fecha}|${(m.desc||'').trim().toLowerCase()}|${m.monto}|${m.tipo}`;
+        // Conteo por clave (multiset): permite que existan legítimamente varios
+        // movimientos iguales (mismo día/desc/monto/tipo) sin tratarlos todos como duplicados.
+        const disponibles={};
+        prev.forEach(m=>{const k=clave(m);disponibles[k]=(disponibles[k]||0)+1;});
+        const nuevos=movs.filter(m=>{
+          if(m.id&&ids.has(m.id))return false;
+          const k=clave(m);
+          if(disponibles[k]>0){disponibles[k]--;return false;}
+          return true;
+        });
         if(nuevos.length===0){alert('Todos los datos ya estaban importados');return prev;}
         alert('✅ Se importaron '+nuevos.length+' registro(s) correctamente');
         return[...prev,...nuevos];
@@ -221,11 +249,11 @@ function HeaderApp(){
   const[hora,setHora]=useState(()=>{const d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes());});
   useEffect(()=>{const t=setInterval(()=>{const d=new Date();setHora(pad(d.getHours())+':'+pad(d.getMinutes()));},30000);return()=>clearInterval(t);},[]);
   return<div style={{padding:'14px 16px',background:'var(--card)',borderBottom:'0.5px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-    <div>
-      <div style={{fontFamily:'var(--fh)',fontSize:'0.6rem',color:'var(--t3)',fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:2}}>Emma Control</div>
-      <div style={{fontFamily:'var(--fh)',fontSize:'1rem',fontWeight:800,color:'var(--text)'}}>{fechaLarga(hoy())}</div>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      <div style={{width:32,height:32,borderRadius:9,background:'var(--primary)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--fh)',fontWeight:800,fontSize:'0.8rem',color:'#fff',flexShrink:0,letterSpacing:'0.02em'}}>EC</div>
+      <div style={{fontFamily:'var(--fn)',fontSize:'1.12rem',fontWeight:700,color:'var(--text)',letterSpacing:'-0.01em'}}>{fechaLarga(hoy())}</div>
     </div>
-    <div style={{fontFamily:'var(--fn)',fontSize:'1.3rem',fontWeight:700,color:'var(--primary)',letterSpacing:'-0.02em'}}>{hora}</div>
+    <div style={{fontFamily:'var(--fn)',fontSize:'1.3rem',fontWeight:700,color:'var(--text)',letterSpacing:'-0.02em'}}>{hora}</div>
   </div>;
 }
 function Plegable({titulo,defaultOpen,children}){
@@ -465,16 +493,62 @@ function Calendario({movimientos}){
 }
 
 /* ══ MODALES ══ */
-function ModalMov({tarjetas,onGuardar,onClose,tipoInicial,catsCustom={},onAddCat}){
+function ModalMov({tarjetas,fijos=[],movs=[],onGuardar,onClose,tipoInicial,catsCustom={},onAddCat}){
   const[tipo,setTipo]=useState(tipoInicial||'gasto');const[ent,setEnt]=useState('negocio');
   const[desc,setDesc]=useState('');const[monto,setMonto]=useState('');const[fecha,setFecha]=useState(hoy());
   const[metodo,setMetodo]=useState('efectivo');const[tid,setTid]=useState(tarjetas[0]?.id||'');
   const[cuotas,setCuotas]=useState(1);const[cat,setCat]=useState('');
   const[catOtros,setCatOtros]=useState('');
+  const[vinculoFijo,setVinculoFijo]=useState('');
   const catsKey=tipo==='ingreso'?'ingreso':ent;
   const catsBase=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
   const cats=[...catsBase.filter(c=>c!=='Otros'),...(catsCustom[catsKey]||[]),'Otros'];
   useEffect(()=>{setCat(cats[0]||'');setCatOtros('');},[tipo,ent]);
+
+  const esCompraEnCuotas=metodo==='tarjeta'&&cuotas>1;
+  // Gastos fijos que se pueden vincular a este movimiento: de la misma entidad, y que todavía no
+  // estén pagados en el mes de la fecha elegida (o el siguiente, para poder cargar un pago
+  // adelantado sin que desaparezca de la lista).
+  const fijosDisponibles=tipo==='gasto'&&!esCompraEnCuotas?fijos.filter(f=>f.activo&&f.entidad===ent&&(!fijoPagado(f,movs,mk(fecha))||!fijoPagado(f,movs,nextMesKey(mk(fecha))))):[];
+  // Gastos cotidianos que se repiten seguido (comida, combustible, etc.) aunque no sean un gasto
+  // fijo: se juntan por descripción y a partir de 2 veces se ofrecen como sugerencia.
+  const descripcionesFrecuentes=(()=>{
+    if(tipo!=='gasto'||esCompraEnCuotas)return[];
+    const porDesc={};
+    (movs||[]).forEach(m=>{
+      if(m.tipo!=='gasto'||(m.ent||'personal')!==ent)return;
+      const txt=(m.desc||'').trim();if(!txt)return;
+      const k=txt.toLowerCase();
+      if(!porDesc[k])porDesc[k]={desc:txt,veces:0,cat:m.cat,monto:m.monto,fecha:m.fecha||''};
+      porDesc[k].veces++;
+      if((m.fecha||'')>=porDesc[k].fecha){porDesc[k].cat=m.cat;porDesc[k].monto=m.monto;porDesc[k].fecha=m.fecha;}
+    });
+    return Object.values(porDesc)
+      .filter(x=>x.veces>=2&&!fijosDisponibles.some(f=>coincideFijo(x.desc,f.nombre)))
+      .sort((a,b)=>b.veces-a.veces).slice(0,8);
+  })();
+  // La Descripción hace también de selector "¿es el pago de un gasto fijo?" y de autocompletar de
+  // gastos frecuentes.
+  const cambiarDesc=v=>{
+    setDesc(v);
+    if(tipo!=='gasto'||esCompraEnCuotas)return;
+    const vTrim=v.trim();
+    const matchFijo=vTrim.length>=3?fijosDisponibles.find(f=>coincideFijo(vTrim,f.nombre)):null;
+    if(matchFijo){
+      setVinculoFijo(matchFijo.id);
+      if(!monto)setMonto(String(matchFijo.monto));
+      if(cats.includes(matchFijo.cat)&&matchFijo.cat!=='Otros')setCat(matchFijo.cat);
+      return;
+    }
+    if(vinculoFijo)setVinculoFijo('');
+    const vNorm=vTrim.toLowerCase();
+    const matchFrec=vTrim.length>=3?descripcionesFrecuentes.find(x=>x.desc.toLowerCase()===vNorm):null;
+    if(matchFrec){
+      if(!monto)setMonto(String(matchFrec.monto));
+      if(cats.includes(matchFrec.cat)&&matchFrec.cat!=='Otros')setCat(matchFrec.cat);
+    }
+  };
+
   const guardar=()=>{
     if(!desc.trim())return alert('Escribí una descripción');
     if(!monto||Number(monto)<=0)return alert('Ingresá un monto válido');
@@ -483,11 +557,15 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial,catsCustom={},onAddCat
     const esNuevaCat=cat==='Otros'&&catOtros.trim();
     const cat_final=esNuevaCat?catOtros.trim():cat;
     if(esNuevaCat)onAddCat&&onAddCat(catsKey,cat_final);
+    // Si la Descripción coincidió con un gasto fijo pendiente, "cambiarDesc" ya dejó vinculoFijo
+    // cargado. El mes usa primerMesNoPagado para que un pago adelantado quede en el mes correcto.
+    const fijoVinculado=vinculoFijo&&fijosDisponibles.find(f=>f.id===vinculoFijo);
+    const camposFijo=tipo==='gasto'&&!esCompraEnCuotas?(fijoVinculado?{fijoId:fijoVinculado.id,fijoMes:primerMesNoPagado(fijoVinculado,movs,fecha)}:{}):{};
     if(tipo==='gasto'&&metodo==='tarjeta'&&tid&&cuotas>1){
       const tarj=tarjetas.find(t=>t.id===tid);const mc=Math.round(m/cuotas);
       const venc=Array.from({length:cuotas},(_,i)=>{if(tarj?.diaVenc){const d=new Date(fecha+'T12:00:00');d.setMonth(d.getMonth()+i+1);d.setDate(tarj.diaVenc);return d.toISOString().slice(0,10);}return addM(fecha,i+1);});
       onGuardar({id:uid2(),tipo:'cuota',ent,desc,montoTotal:m,cuotas,montoCuota:mc,tarjetaId:tid,fecha,cat:cat_final,venc});
-    }else{onGuardar({id:uid2(),tipo,ent,desc,monto:m,fecha,metodo:tipo==='gasto'?metodo:'',tarjetaId:metodo==='tarjeta'&&tipo==='gasto'?tid:'',cat:cat_final});}
+    }else{onGuardar({id:uid2(),tipo,ent,desc,monto:m,fecha,metodo:tipo==='gasto'?metodo:'',tarjetaId:metodo==='tarjeta'&&tipo==='gasto'?tid:'',cat:cat_final,...camposFijo});}
     onClose();
   };
   const mn=Number(monto)||0;
@@ -495,7 +573,14 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial,catsCustom={},onAddCat
     <div style={{marginBottom:12}}><Toggle opts={[['gasto','💸 Gasto'],['ingreso','💰 Ingreso']]} val={tipo} onChange={setTipo} cm={{gasto:'var(--danger)',ingreso:'var(--success)'}}/></div>
     <div style={{marginBottom:12}}><Toggle opts={[['personal','👤 Personal'],['negocio','💼 Trabajo']]} val={ent} onChange={setEnt} cm={{personal:'var(--pers)',negocio:'var(--neg)'}}/></div>
     <label style={S.lbl}>Descripción</label>
-    <input style={{...S.inp,marginBottom:12}} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Ej: Carga de combustible"/>
+    <input style={{...S.inp,marginBottom:8}} value={desc} onChange={e=>cambiarDesc(e.target.value)} placeholder="Ej: Comida, Combustible, Compras..." list={(fijosDisponibles.length>0||descripcionesFrecuentes.length>0)?'desc-dl':undefined}/>
+    {(fijosDisponibles.length>0||descripcionesFrecuentes.length>0)&&<datalist id="desc-dl">
+      {fijosDisponibles.map(f=><option key={'f-'+f.id} value={f.nombre}>{fmt(f.monto)} · gasto fijo pendiente</option>)}
+      {descripcionesFrecuentes.map(x=><option key={'d-'+x.desc} value={x.desc}>{fmt(x.monto)} · usado {x.veces} veces</option>)}
+    </datalist>}
+    {vinculoFijo?<div style={{background:'#f0fdf4',border:'0.5px solid #bbf7d0',borderRadius:10,padding:'9px 14px',marginBottom:12,fontSize:12,color:'#15803d'}}>
+      ✓ Coincide con un gasto fijo — al guardar queda marcado como pagado en Gastos Fijos (categoría y monto completados).
+    </div>:<div style={{marginBottom:12}}/>}
     <label style={S.lbl}>Monto $</label>
     <input style={{...S.inpR,marginBottom:12}} type="number" inputMode="numeric" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="0"/>
     <label style={S.lbl}>Fecha</label>
@@ -528,15 +613,45 @@ function ModalMov({tarjetas,onGuardar,onClose,tipoInicial,catsCustom={},onAddCat
   </Modal>;
 }
 
-function ModalEditMov({mov,tarjetas,onGuardar,onClose,catsCustom={},onAddCat}){
+function ModalEditMov({mov,tarjetas,fijos=[],movs=[],onGuardar,onClose,catsCustom={},onAddCat}){
   const esCuota=mov.tipo==='cuota';
   const[tipo,setTipo]=useState(esCuota?'gasto':mov.tipo);const[ent,setEnt]=useState(mov.ent||'negocio');
   const[desc,setDesc]=useState(mov.desc||'');const[monto,setMonto]=useState(esCuota?(mov.montoTotal||''):(mov.monto||''));
   const[fecha,setFecha]=useState(mov.fecha||hoy());const[metodo,setMetodo]=useState(mov.metodo||'efectivo');const[cat,setCat]=useState(mov.cat||'');
   const[catOtros,setCatOtros]=useState('');
+  const[vinculoFijo,setVinculoFijo]=useState(mov.fijoId||'');
   const catsKey=tipo==='ingreso'?'ingreso':ent;
   const catsBase=tipo==='ingreso'?CATS.ingreso:(CATS[ent]||[]);
   const cats=[...catsBase.filter(c=>c!=='Otros'),...(catsCustom[catsKey]||[]),'Otros'];
+
+  const mesFijo=mk(fecha);
+  const fijoDisponible=f=>f.id===mov.fijoId||!fijoPagado(f,movs,mesFijo)||!fijoPagado(f,movs,nextMesKey(mesFijo));
+  const fijosDisponibles=tipo==='gasto'&&!esCuota?fijos.filter(f=>f.activo&&f.entidad===ent&&fijoDisponible(f)):[];
+  const descripcionesFrecuentes=(()=>{
+    if(tipo!=='gasto'||esCuota)return[];
+    const porDesc={};
+    (movs||[]).forEach(m=>{
+      if(m.tipo!=='gasto'||(m.ent||'personal')!==ent)return;
+      const txt=(m.desc||'').trim();if(!txt)return;
+      const k=txt.toLowerCase();
+      if(!porDesc[k])porDesc[k]={desc:txt,veces:0,cat:m.cat,monto:m.monto,fecha:m.fecha||''};
+      porDesc[k].veces++;
+      if((m.fecha||'')>=porDesc[k].fecha){porDesc[k].cat=m.cat;porDesc[k].monto=m.monto;porDesc[k].fecha=m.fecha;}
+    });
+    return Object.values(porDesc)
+      .filter(x=>x.veces>=2&&!fijosDisponibles.some(f=>coincideFijo(x.desc,f.nombre)))
+      .sort((a,b)=>b.veces-a.veces).slice(0,8);
+  })();
+  // En edición no se pisan monto/categoría ya cargados: solo se actualiza el vínculo con el fijo.
+  const cambiarDesc=v=>{
+    setDesc(v);
+    if(tipo!=='gasto'||esCuota)return;
+    const vTrim=v.trim();
+    const matchFijo=vTrim.length>=3?fijosDisponibles.find(f=>coincideFijo(vTrim,f.nombre)):null;
+    if(matchFijo){setVinculoFijo(matchFijo.id);return;}
+    if(vinculoFijo)setVinculoFijo('');
+  };
+
   const guardar=()=>{
     if(!desc.trim())return alert('Escribí una descripción');
     if(!esCuota&&(!monto||Number(monto)<=0))return alert('Ingresá un monto válido');
@@ -544,13 +659,21 @@ function ModalEditMov({mov,tarjetas,onGuardar,onClose,catsCustom={},onAddCat}){
     const esNuevaCat=cat==='Otros'&&catOtros.trim();
     const cat_final=esNuevaCat?catOtros.trim():cat;
     if(esNuevaCat)onAddCat&&onAddCat(catsKey,cat_final);
-    if(esCuota){onGuardar({...mov,desc,fecha,cat:cat_final,ent});}else{onGuardar({...mov,tipo,ent,desc,monto:Number(monto),fecha,metodo,cat:cat_final});}
+    const fijoVinculado=vinculoFijo&&fijosDisponibles.find(f=>f.id===vinculoFijo);
+    const camposFijo=tipo==='gasto'&&!esCuota?(fijoVinculado?{fijoId:fijoVinculado.id,fijoMes:primerMesNoPagado(fijoVinculado,movs,fecha)}:{fijoId:null,fijoMes:null}):{};
+    if(esCuota){onGuardar({...mov,desc,fecha,cat:cat_final,ent});}else{onGuardar({...mov,tipo,ent,desc,monto:Number(monto),fecha,metodo,cat:cat_final,...camposFijo});}
     onClose();
   };
   return<Modal onClose={onClose} title="✏️ Editar movimiento">
     {esCuota&&<div style={{background:'#fffbeb',border:'0.5px solid #fde68a',borderRadius:10,padding:'10px 14px',fontSize:12,color:'#92400e',marginBottom:14}}>💳 Es una compra en cuotas. Solo podés editar la descripción, fecha y categoría.</div>}
     {!esCuota&&<><div style={{marginBottom:12}}><Toggle opts={[['gasto','💸 Gasto'],['ingreso','💰 Ingreso']]} val={tipo} onChange={setTipo} cm={{gasto:'var(--danger)',ingreso:'var(--success)'}}/></div><div style={{marginBottom:12}}><Toggle opts={[['personal','👤 Personal'],['negocio','💼 Trabajo']]} val={ent} onChange={setEnt} cm={{personal:'var(--pers)',negocio:'var(--neg)'}}/></div></>}
-    <label style={S.lbl}>Descripción</label><input style={{...S.inp,marginBottom:12}} value={desc} onChange={e=>setDesc(e.target.value)}/>
+    <label style={S.lbl}>Descripción</label>
+    <input style={{...S.inp,marginBottom:8}} value={desc} onChange={e=>cambiarDesc(e.target.value)} placeholder="Ej: Comida, Combustible, Compras..." list={(fijosDisponibles.length>0||descripcionesFrecuentes.length>0)?'desc-edit-dl':undefined}/>
+    {(fijosDisponibles.length>0||descripcionesFrecuentes.length>0)&&<datalist id="desc-edit-dl">
+      {fijosDisponibles.map(f=><option key={'f-'+f.id} value={f.nombre}>{fmt(f.monto)} · gasto fijo pendiente</option>)}
+      {descripcionesFrecuentes.map(x=><option key={'d-'+x.desc} value={x.desc}>{fmt(x.monto)} · usado {x.veces} veces</option>)}
+    </datalist>}
+    {vinculoFijo?<div style={{background:'#f0fdf4',border:'0.5px solid #bbf7d0',borderRadius:10,padding:'9px 14px',marginBottom:12,fontSize:12,color:'#15803d'}}>✓ Coincide con un gasto fijo — al guardar queda marcado como pagado en Gastos Fijos.</div>:<div style={{marginBottom:12}}/>}
     {!esCuota&&<><label style={S.lbl}>Monto $</label><input style={{...S.inpR,marginBottom:12}} type="number" inputMode="numeric" value={monto} onChange={e=>setMonto(e.target.value)}/></>}
     <label style={S.lbl}>Fecha</label><input style={{...S.inp,marginBottom:12}} type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/>
     <label style={S.lbl}>Categoría</label><select style={{...S.inp,marginBottom:cat==='Otros'?8:12}} value={cat} onChange={e=>{setCat(e.target.value);if(e.target.value!=='Otros')setCatOtros('');}}>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
@@ -645,7 +768,7 @@ function GraficoFinanciero({movs}){
 }
 
 /* ══ DASHBOARD ══ */
-function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos,onVerArqueo}){
+function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos,onVerArqueo,onVerFijos}){
   const[presup,setPresup]=useState(()=>Number(localStorage.getItem('ec_presupuesto'))||0);
   const mesK=mk(hoy());
   const movMes=movs.filter(m=>mk(m.fecha)===mesK);
@@ -653,10 +776,24 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
   const gastosVar=movMes.filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);
   const cuotasMes=movs.filter(m=>m.tipo==='cuota'&&(m.venc||[]).some(v=>mk(v)===mesK));
   const totCuotas=cuotasMes.reduce((a,m)=>a+m.montoCuota,0);
-  const pagosMes=(pagos||[]).filter(p=>p.mes===mesK);
-  const totFijoPag=pagosMes.reduce((a,p)=>a+p.monto,0);
-  const fijosPend=fijos.filter(f=>f.activo&&!pagosMes.find(p=>p.gastoFijoId===f.id));
+  // Antes esto se calculaba con la colección "pagos"/"pagosFijos", que nunca se llenaba en ningún
+  // lado — por eso el Dashboard mostraba TODOS los gastos fijos como pendientes aunque ya estuvieran
+  // pagados. Se corrige usando la misma fuente que la pantalla de Gastos Fijos (los movimientos ya
+  // vinculados con fijoId+fijoMes).
+  const fijosPend=fijos.filter(f=>f.activo&&!fijoPagado(f,movs,mesK));
   const totPend=fijosPend.reduce((a,f)=>a+f.monto,0);
+  const compartirResumen=async()=>{
+    const texto=`📊 Resumen de ${mlabel(mesK)} — Emma Control\n\n`+
+      `↑ Ingresos: ${fmt(ingresos)}\n`+
+      `↓ Egresos: ${fmt(gastosVar)}\n`+
+      `💰 Balance: ${fmt(ingresos-gastosVar)}`+
+      (totPend>0?`\n📌 Fijos pendientes: ${fmt(totPend)}`:'');
+    if(navigator.share){
+      try{await navigator.share({title:'Resumen '+mlabel(mesK),text:texto});}catch(e){}
+    }else if(navigator.clipboard){
+      try{await navigator.clipboard.writeText(texto);alert('📋 Resumen copiado al portapapeles');}catch(e){alert(texto);}
+    }else alert(texto);
+  };
   const totEgresos=gastosVar;
   const balance=ingresos-totEgresos;
   const cb=balance>=0?'var(--success)':'var(--danger)';
@@ -698,7 +835,10 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
       </div>
       <div style={{...S.card2,marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center',background:balance>=0?'var(--sdim)':'var(--ddim)',borderColor:balance>=0?'var(--sborder)':'var(--dborder)'}}>
         <span style={{fontSize:12,color:'var(--t2)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em'}}>Balance del mes</span>
-        <span style={{fontFamily:'var(--fn)',fontSize:'1.25rem',fontWeight:800,color:cb}}>{fmt(balance)}</span>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontFamily:'var(--fn)',fontSize:'1.25rem',fontWeight:800,color:cb}}>{fmt(balance)}</span>
+          <button onClick={compartirResumen} aria-label="Compartir resumen" style={{background:'rgba(0,0,0,0.06)',border:'none',color:'var(--t2)',fontSize:14,cursor:'pointer',width:30,height:30,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>📤</button>
+        </div>
       </div>
       {(()=>{
         const ed=()=>{const v=window.prompt('Presupuesto de gastos del mes ($):',presup||'');if(v!==null){const n=Math.max(0,Number(v)||0);setPresup(n);localStorage.setItem('ec_presupuesto',n);}};
@@ -711,7 +851,7 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
           {exc?<div style={{fontSize:12,color:'#dc2626',fontWeight:600,marginTop:7}}>⚠️ Te pasaste por {fmt(totEgresos-presup)}</div>:<div style={{fontSize:12,color:'var(--t2)',marginTop:7}}>Te quedan {fmt(presup-totEgresos)} ({100-pct}%)</div>}
         </div>;
       })()}
-      {totPend>0&&<div style={{...S.card2,marginBottom:12,background:'#fffbeb',borderColor:'#fde68a',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      {totPend>0&&<div onClick={onVerFijos} style={{...S.card2,marginBottom:12,background:'#fffbeb',borderColor:'#fde68a',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:onVerFijos?'pointer':'default'}}>
         <span style={{fontSize:13,color:'#92400e',fontWeight:500}}>📌 Gastos fijos pendientes</span>
         <span style={{fontFamily:'var(--fn)',fontSize:15,fontWeight:700,color:'#d97706',letterSpacing:'-0.01em'}}>{fmt(totPend)}</span>
       </div>}
@@ -732,36 +872,37 @@ function Dashboard({movs,fijos,pagos,tarjetas,onNuevo,onVerIngresos,onVerEgresos
 
 /* ══ DETALLE INGRESOS ══ */
 function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
-  const mesK=mk(hoy());const[mes,setMes]=useState(mesK);const[busq,setBusq]=useState('');const[catAbierta,setCatAbierta]=useState(false);
+  const mesK=mk(hoy());const[mes,setMes]=useState(mesK);const[busq,setBusq]=useState('');
   const meses=useMemo(()=>{const s=new Set(movs.filter(m=>m.tipo==='ingreso').map(m=>mk(m.fecha)));s.add(mesK);return[...s].sort().reverse();},[movs]);
   const lista=useMemo(()=>movs.filter(m=>m.tipo==='ingreso'&&(busq.trim()!==''||mk(m.fecha)===mes)&&(busq.trim()===''||((m.desc||'')+' '+(m.cat||'')).toLowerCase().includes(busq.trim().toLowerCase()))).sort((a,b)=>b.fecha.localeCompare(a.fecha)),[movs,mes,busq]);
   const total=lista.reduce((a,m)=>a+m.monto,0);
-  const porCat=useMemo(()=>{const r={};lista.forEach(m=>{r[m.cat]=(r[m.cat]||0)+m.monto;});return Object.entries(r).sort((a,b)=>b[1]-a[1]);},[lista]);
+  const totP=lista.filter(m=>m.ent==='personal').reduce((a,m)=>a+m.monto,0);
+  const totN=lista.filter(m=>m.ent==='negocio').reduce((a,m)=>a+m.monto,0);
   const icoMetodo={efectivo:'💵',tarjeta:'💳',débito:'💳',transferencia:'📲'};
   const porDia=useMemo(()=>{const r={};lista.forEach(m=>{if(!r[m.fecha])r[m.fecha]=[];r[m.fecha].push(m);});return r;},[lista]);
   const dias=useMemo(()=>Object.keys(porDia).sort((a,b)=>b.localeCompare(a)),[porDia]);
   return<div style={{...S.scr,WebkitOverflowScrolling:'touch'}} data-scroll="1">
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-        <button onClick={onVolver} style={{background:'#ede9fe',border:'none',color:'var(--primary)',fontSize:18,cursor:'pointer',width:34,height:34,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}>←</button>
-        <span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Ingresos</span>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <button onClick={onVolver} style={{background:'#ede9fe',border:'none',color:'var(--primary)',fontSize:18,cursor:'pointer',width:34,height:34,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}>←</button>
+          <span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Ingresos</span>
+        </div>
+        <select value={mes} onChange={e=>setMes(e.target.value)} style={{background:'var(--card2)',border:'1px solid var(--border)',borderRadius:20,padding:'6px 10px',fontSize:12,fontWeight:600,color:'var(--text)',outline:'none',flexShrink:0}}>{meses.map(m=><option key={m} value={m}>{mlabel(m)}</option>)}</select>
       </div>
-      <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder="Buscar por descripción o categoría..." style={{...S.inp,fontSize:13,marginBottom:10}}/>
-      <select value={mes} onChange={e=>setMes(e.target.value)} style={{...S.inp,fontSize:13,marginBottom:10}}>{meses.map(m=><option key={m} value={m}>{mlabel(m)}</option>)}</select>
-      <div style={{background:'#f0fdf4',borderRadius:12,padding:'12px 14px',border:'0.5px solid #bbf7d0'}}>
-        <div style={{fontSize:9,color:'#166534',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>Total {busq.trim()?'de la búsqueda':'del mes'}</div>
-        <div style={{fontFamily:'var(--fn)',fontSize:26,fontWeight:700,color:'#16a34a',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
-        <div style={{fontSize:11,color:'#4ade80',marginTop:2}}>{lista.length} ingreso{lista.length!==1?'s':''}</div>
-      </div>
+      <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder="Buscar por descripción o categoría..." style={{...S.inp,fontSize:13}}/>
     </div>
     <div style={{padding:'14px 14px 0'}}>
-      {porCat.length>0&&<div style={{...S.card,marginBottom:12,padding:'10px 14px'}}>
-        <div onClick={()=>setCatAbierta(a=>!a)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:catAbierta?8:0}}>
-          <span style={S.st}>Por categoría</span>
-          <span style={{fontSize:11,color:'var(--t3)',transform:catAbierta?'rotate(0deg)':'rotate(-90deg)',display:'inline-block'}}>▾</span>
+      <div style={{background:'#f0fdf4',borderRadius:12,padding:'12px 14px',border:'0.5px solid #bbf7d0',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:9,color:'#166534',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>Total {busq.trim()?'de la búsqueda':'del mes'}</div>
+          <div style={{fontFamily:'var(--fn)',fontSize:26,fontWeight:700,color:'#16a34a',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
         </div>
-        {catAbierta&&porCat.map(([cat,v],i)=><div key={cat} style={{...S.row,borderBottom:i<porCat.length-1?'0.5px solid #f0eeff':'none'}}><div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:8,height:8,borderRadius:'50%',background:`hsl(${140+i*30},60%,40%)`,flexShrink:0}}/><span style={{fontSize:13,color:'var(--text)'}}>{cat}</span></div><div style={{textAlign:'right'}}><div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#16a34a'}}>{fmt(v)}</div>{total>0&&<div style={{fontSize:10,color:'var(--t3)'}}>{Math.round(v/total*100)}%</div>}</div></div>)}
-      </div>}
+        <div style={{textAlign:'right'}}>
+          <div style={{fontSize:11,color:'#166534'}}>Personal <b>{fmt(totP)}</b></div>
+          <div style={{fontSize:11,color:'#166534'}}>Trabajo <b>{fmt(totN)}</b></div>
+        </div>
+      </div>
       <div style={{...S.st,marginBottom:4}}>Todos los ingresos</div>
       {lista.length===0&&<div style={{textAlign:'center',padding:'30px 0',color:'var(--t3)',fontSize:14}}>Sin ingresos este mes</div>}
       {dias.map((dia,i)=><div key={dia}>
@@ -787,41 +928,39 @@ function DetalleIngresos({movs,onNuevo,onVolver,onEditar,onEliminar}){
 
 /* ══ DETALLE EGRESOS ══ */
 function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
-  const mesK=mk(hoy());const[mes,setMes]=useState(mesK);const[filtEnt,setFiltEnt]=useState('todos');const[busq,setBusq]=useState('');const[catAbierta,setCatAbierta]=useState(false);
+  const mesK=mk(hoy());const[mes,setMes]=useState(mesK);const[busq,setBusq]=useState('');
   const meses=useMemo(()=>{const s=new Set(movs.filter(m=>m.tipo==='gasto'||m.tipo==='cuota').map(m=>mk(m.fecha)));s.add(mesK);return[...s].sort().reverse();},[movs]);
   const gastos=movs.filter(m=>m.tipo==='gasto'&&(busq.trim()!==''||mk(m.fecha)===mes));
   const cuotas=movs.filter(m=>m.tipo==='cuota'&&(m.venc||[]).some(v=>mk(v)===mes));
-  const lista=useMemo(()=>[...gastos].filter(m=>(filtEnt==='todos'||m.ent===filtEnt)&&(busq.trim()===''||((m.desc||'')+' '+(m.cat||'')).toLowerCase().includes(busq.trim().toLowerCase()))).sort((a,b)=>b.fecha.localeCompare(a.fecha)),[gastos,filtEnt,busq]);
+  const lista=useMemo(()=>[...gastos].filter(m=>busq.trim()===''||((m.desc||'')+' '+(m.cat||'')).toLowerCase().includes(busq.trim().toLowerCase())).sort((a,b)=>b.fecha.localeCompare(a.fecha)),[gastos,busq]);
   const total=lista.reduce((a,m)=>a+m.monto,0);
   const totP=lista.filter(m=>m.ent==='personal').reduce((a,m)=>a+m.monto,0);
   const totN=lista.filter(m=>m.ent==='negocio').reduce((a,m)=>a+m.monto,0);
-  const porCat=useMemo(()=>{const r={};lista.forEach(m=>{r[m.cat]=(r[m.cat]||0)+m.monto;});return Object.entries(r).sort((a,b)=>b[1]-a[1]);},[lista]);
   const icoMetodo={efectivo:'💵',tarjeta:'💳',débito:'💳',transferencia:'📲'};
   const porDia=useMemo(()=>{const r={};lista.forEach(m=>{if(!r[m.fecha])r[m.fecha]=[];r[m.fecha].push(m);});return r;},[lista]);
   const dias=useMemo(()=>Object.keys(porDia).sort((a,b)=>b.localeCompare(a)),[porDia]);
   return<div style={{...S.scr,WebkitOverflowScrolling:'touch'}} data-scroll="1">
     <div style={{padding:'14px 16px 12px',background:'var(--card)',borderBottom:'0.5px solid var(--border)'}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-        <button onClick={onVolver} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:18,cursor:'pointer',width:34,height:34,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}>←</button>
-        <span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Egresos</span>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <button onClick={onVolver} style={{background:'#fef2f2',border:'none',color:'#dc2626',fontSize:18,cursor:'pointer',width:34,height:34,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}>←</button>
+          <span style={{fontFamily:'var(--fh)',fontSize:18,fontWeight:800,color:'var(--text)'}}>Egresos</span>
+        </div>
+        <select value={mes} onChange={e=>setMes(e.target.value)} style={{background:'var(--card2)',border:'1px solid var(--border)',borderRadius:20,padding:'6px 10px',fontSize:12,fontWeight:600,color:'var(--text)',outline:'none',flexShrink:0}}>{meses.map(m=><option key={m} value={m}>{mlabel(m)}</option>)}</select>
       </div>
-      <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder="Buscar por descripción o categoría..." style={{...S.inp,fontSize:13,marginBottom:10}}/>
-      <select value={mes} onChange={e=>setMes(e.target.value)} style={{...S.inp,fontSize:13,marginBottom:10}}>{meses.map(m=><option key={m} value={m}>{mlabel(m)}</option>)}</select>
-      <div style={{background:'#fef2f2',borderRadius:12,padding:'12px 14px',border:'0.5px solid #fecaca',marginBottom:10}}>
-        <div style={{fontSize:9,color:'#991b1b',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>Total {busq.trim()?'de la búsqueda':'del mes'}</div>
-        <div style={{fontFamily:'var(--fn)',fontSize:26,fontWeight:700,color:'#dc2626',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
-        <div style={{display:'flex',gap:14,marginTop:4}}><span style={{fontSize:11,color:'#991b1b'}}>Personal <b>{fmt(totP)}</b></span><span style={{fontSize:11,color:'#991b1b'}}>Trabajo <b>{fmt(totN)}</b></span></div>
-      </div>
-      <div style={{display:'flex',gap:6}}>{[['todos','Todos'],['personal','Personal'],['negocio','Trabajo']].map(([v,l])=><button key={v} onClick={()=>setFiltEnt(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtEnt===v?'var(--primary)':'var(--border)'}`,background:filtEnt===v?'var(--pdim)':'transparent',color:filtEnt===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}</div>
+      <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder="Buscar por descripción o categoría..." style={{...S.inp,fontSize:13}}/>
     </div>
     <div style={{padding:'14px 14px 0'}}>
-      {porCat.length>0&&<div style={{...S.card,marginBottom:12,padding:'10px 14px'}}>
-        <div onClick={()=>setCatAbierta(a=>!a)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:catAbierta?8:0}}>
-          <span style={S.st}>Por categoría</span>
-          <span style={{fontSize:11,color:'var(--t3)',transform:catAbierta?'rotate(0deg)':'rotate(-90deg)',display:'inline-block'}}>▾</span>
+      <div style={{background:'#fef2f2',borderRadius:12,padding:'12px 14px',border:'0.5px solid #fecaca',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:9,color:'#991b1b',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:3}}>Total {busq.trim()?'de la búsqueda':'del mes'}</div>
+          <div style={{fontFamily:'var(--fn)',fontSize:26,fontWeight:700,color:'#dc2626',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
         </div>
-        {catAbierta&&porCat.map(([cat,v],i)=><div key={cat} style={{...S.row,borderBottom:i<porCat.length-1?'0.5px solid #f0eeff':'none'}}><div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:8,height:8,borderRadius:'50%',background:`hsl(${0+i*25},65%,50%)`,flexShrink:0}}/><span style={{fontSize:13,color:'var(--text)'}}>{cat}</span></div><div style={{textAlign:'right'}}><div style={{fontFamily:'var(--fn)',fontSize:13,fontWeight:700,color:'#dc2626'}}>{fmt(v)}</div>{total>0&&<div style={{fontSize:10,color:'var(--t3)'}}>{Math.round(v/total*100)}%</div>}</div></div>)}
-      </div>}
+        <div style={{textAlign:'right'}}>
+          <div style={{fontSize:11,color:'#991b1b'}}>Personal <b>{fmt(totP)}</b></div>
+          <div style={{fontSize:11,color:'#991b1b'}}>Trabajo <b>{fmt(totN)}</b></div>
+        </div>
+      </div>
       <div style={{...S.st,marginBottom:4}}>Todos los egresos</div>
       {lista.length===0&&<div style={{textAlign:'center',padding:'30px 0',color:'var(--t3)',fontSize:14}}>Sin egresos este mes</div>}
       {dias.map((dia,i)=><div key={dia}>
@@ -832,7 +971,7 @@ function DetalleEgresos({movs,tarjetas,onNuevo,onVolver,onEditar,onEliminar}){
         </div>
         {porDia[dia].map(m=><div key={m.id+(m._nCuota||'')} style={{...S.card,marginBottom:8,display:'flex',alignItems:'center',gap:10,...(esRedondeo(m.desc)?{background:'rgba(245,158,11,0.12)',border:'1.5px solid #f59e0b'}:{})}}>
           <div style={{width:36,height:36,borderRadius:10,background:m._cuota?'#fffbeb':'#fef2f2',border:`0.5px solid ${m._cuota?'#fde68a':'#fecaca'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{esRedondeo(m.desc)?'🔄':(m._cuota?'💳':icoMetodo[m.metodo]||'💸')}</div>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m._cuota?<span style={{fontSize:10,color:'#d97706',fontWeight:600}}>{m._label}</span>:<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.desc}</div><div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap',alignItems:'center'}}><ChipP t={m.ent} sm/>{m._cuota?<span style={{fontSize:10,color:'#d97706',fontWeight:600}}>{m._label}</span>:<span style={{fontSize:10,color:'var(--t3)'}}>{m.cat}</span>}{m.fijoId&&<span style={{fontSize:10,color:'var(--primary)',fontWeight:700}}>📌 Fijo</span>}</div></div>
           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
             <div style={{fontFamily:'var(--fn)',fontWeight:700,fontSize:15,color:m._cuota?'#d97706':'#dc2626'}}>-{fmt(m.monto)}</div>
             {!m._cuota&&<button onClick={()=>onEditar(m)} style={{background:'var(--pdim)',border:'none',color:'var(--primary)',fontSize:13,cursor:'pointer',padding:'5px 7px',borderRadius:8}}>✏️</button>}
@@ -940,13 +1079,46 @@ function Tarjetas({tarjetas,movs,onAgregar,onEditar,onEliminar,onSaldarCuota,onE
 }
 
 /* ══ GASTOS FIJOS ══ */
-function GastosFijos({fijos,movs,setMovs,onAgregar,onEditar,onEliminar}){
+function GastosFijos({fijos,movs,setMovs,onAgregar,onEditar,onEliminar,mostrarDeshacer}){
   const mes=mk(hoy());const[filtro,setFiltro]=useState('todos');
-  const pagado=f=>(movs||[]).some(m=>m.fijoId===f.id&&m.fijoMes===mes);
+  const[ignorados,setIgnorados]=useState(()=>new Set());
+  const pagado=f=>fijoPagado(f,movs,mes);
+  // Compara los gastos ya cargados a mano en Movimientos contra los fijos pendientes: si hay uno
+  // sin vincular, del mismo tipo de entidad, cargado este mes o el anterior (para cubrir pagos
+  // adelantados), y cuya descripción coincide con el nombre del fijo, se sugiere vincularlo en
+  // vez de tener que abrirlo y editarlo a mano.
+  const sugerenciaFijo=f=>{
+    const mesAnterior=(()=>{const[y,m]=mes.split('-').map(Number);const d=new Date(y,m-2,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');})();
+    return(movs||[]).find(m=>{
+      if(m.tipo!=='gasto'||m.fijoId||ignorados.has(m.id))return false;
+      if((m.ent||'personal')!==f.entidad)return false;
+      const mesM=mk(m.fecha);if(mesM!==mes&&mesM!==mesAnterior)return false;
+      return coincideFijo(m.desc,f.nombre);
+    })||null;
+  };
+  const vincularSugerencia=(f,m)=>setMovs(prev=>prev.map(x=>x.id===m.id?{...x,fijoId:f.id,fijoMes:primerMesNoPagado(f,movs,m.fecha)}:x));
+  const ignorarSugerencia=m=>setIgnorados(prev=>new Set(prev).add(m.id));
   const totF=fijos.filter(f=>f.activo).reduce((a,f)=>a+f.monto,0);
   const totP=fijos.filter(f=>f.activo&&pagado(f)).reduce((a,f)=>a+f.monto,0);
   const totPend=fijos.filter(f=>f.activo&&!pagado(f)).reduce((a,f)=>a+f.monto,0);
-  const toggle=f=>{if(pagado(f)){setMovs(prev=>prev.filter(m=>!(m.fijoId===f.id&&m.fijoMes===mes)));}else{if(!window.confirm('¿Confirmás el pago de '+f.nombre+' ('+fmt(f.monto)+')? Se registra como gasto.'))return;setMovs(prev=>[...prev,{id:uid2(),tipo:'gasto',desc:f.nombre,monto:f.monto,fecha:hoy(),cat:f.cat||'Gasto fijo',ent:f.entidad||'personal',fijoId:f.id,fijoMes:mes}]);}};
+  const toggle=f=>{
+    if(pagado(f)){
+      const cant=(movs||[]).filter(m=>m.fijoId===f.id&&m.fijoMes===mes).length;
+      if(!window.confirm(`¿Desmarcar "${f.nombre}" como pagado? Se va a borrar el movimiento de gasto vinculado${cant>1?` (${cant} registros)`:''}.`))return;
+      const borrados=(movs||[]).filter(m=>m.fijoId===f.id&&m.fijoMes===mes);
+      setMovs(prev=>prev.filter(m=>!(m.fijoId===f.id&&m.fijoMes===mes)));
+      if(mostrarDeshacer)mostrarDeshacer(`Pago de "${f.nombre}" desmarcado`,()=>setMovs(prev=>[...prev,...borrados]));
+    }else{
+      const val=window.prompt(`¿Cuánto pagaste de "${f.nombre}"? (de referencia: ${fmt(f.monto)})`,f.monto);
+      if(val===null)return;
+      const montoReal=Math.round(Number(val));
+      if(!montoReal||montoReal<=0)return alert('Ingresá un monto válido');
+      const mesPago=primerMesNoPagado(f,movs,hoy());
+      const esAdelanto=mesPago!==mes;
+      if(!window.confirm(`¿Confirmás el pago de ${f.nombre} (${fmt(montoReal)})${esAdelanto?' como adelanto del próximo mes':''}? Se registra como gasto.`))return;
+      setMovs(prev=>[...prev,{id:uid2(),tipo:'gasto',desc:f.nombre,monto:montoReal,fecha:hoy(),cat:f.cat||'Gasto fijo',ent:f.entidad||'personal',fijoId:f.id,fijoMes:mesPago}]);
+    }
+  };
   const lista=fijos.filter(f=>filtro==='todos'||f.entidad===filtro);
   const getD=f=>{const[y,mo]=hoy().split('-');return dh(`${y}-${mo}-${pad(f.diaVenc)}`);};
   const bc=(f,pag)=>{if(pag)return'var(--primary)';const d=getD(f);return d<=0?'#dc2626':d<=5?'#d97706':'var(--border)';};
@@ -959,7 +1131,7 @@ function GastosFijos({fijos,movs,setMovs,onAgregar,onEditar,onEliminar}){
       <div style={{display:'flex',gap:8,marginBottom:14}}>{[['Total',totF,'var(--text)'],['Pagado',totP,'#16a34a'],['Pendiente',totPend,'#d97706']].map(([l,v,c])=><div key={l} style={{flex:1,...S.card2,textAlign:'center',padding:'10px 6px'}}><div style={{fontSize:9,color:'var(--t2)',marginBottom:3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{l}</div><div style={{fontFamily:'var(--fn)',fontSize:14,fontWeight:700,color:c}}>{fmt(v)}</div></div>)}</div>
       <div style={{display:'flex',gap:6,marginBottom:12}}>{[['todos','Todos'],['personal','Personal'],['negocio','Trabajo']].map(([v,l])=><button key={v} onClick={()=>setFiltro(v)} style={{flex:1,padding:'7px 0',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${filtro===v?'var(--primary)':'var(--border)'}`,background:filtro===v?'var(--pdim)':'transparent',color:filtro===v?'var(--primary)':'var(--t2)'}}>{l}</button>)}</div>
       {lista.length===0&&<div style={{textAlign:'center',padding:'30px 0',color:'var(--t3)',fontSize:14}}>Sin gastos fijos</div>}
-      {lista.map(f=>{const pag=pagado(f);const d=getD(f);
+      {lista.map(f=>{const pag=pagado(f);const d=getD(f);const sug=!pag?sugerenciaFijo(f):null;
         return<div key={f.id} style={{...S.card,marginBottom:10,borderLeft:`3px solid ${bc(f,pag)}`,opacity:pag?0.8:1}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{flex:1,minWidth:0}}>
@@ -974,6 +1146,13 @@ function GastosFijos({fijos,movs,setMovs,onAgregar,onEditar,onEliminar}){
               <button onClick={()=>onEliminar(f.id)} style={{background:'none',border:'none',color:'var(--t3)',fontSize:15,cursor:'pointer'}}>✕</button>
             </div>
           </div>
+          {sug&&<div style={{marginTop:10,paddingTop:10,borderTop:'0.5px solid var(--border)'}}>
+            <div style={{fontSize:12,color:'var(--t2)',marginBottom:7}}>💡 Ya cargaste <b style={{color:'var(--text)'}}>"{sug.desc}"</b> el {fechaLarga(sug.fecha)} ({fmt(sug.monto)}). ¿Es el pago de este fijo?</div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>vincularSugerencia(f,sug)} style={{flex:1,padding:'7px 0',borderRadius:10,border:'none',background:'var(--primary)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Sí, es este pago</button>
+              <button onClick={()=>ignorarSugerencia(sug)} style={{padding:'7px 14px',borderRadius:10,border:'1px solid var(--border)',background:'transparent',color:'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer'}}>No</button>
+            </div>
+          </div>}
         </div>;
       })}
     </div>
@@ -1310,6 +1489,14 @@ function App(){
   const[mTarj,setMTarj]=useState(false);const[eTarj,setETarj]=useState(null);
   const[mFijo,setMFijo]=useState(false);const[eFijo,setEFijo]=useState(null);
   const[mEditMov,setMEditMov]=useState(false);const[movEdit,setMovEdit]=useState(null);
+  const[deshacer,setDeshacer]=useState(null); // {msg,restaurar} — toast de "deshacer" tras un borrado
+  const deshacerTimer=useRef(null);
+  const mostrarDeshacer=useCallback((msg,restaurar)=>{
+    clearTimeout(deshacerTimer.current);
+    setDeshacer({msg,restaurar});
+    deshacerTimer.current=setTimeout(()=>setDeshacer(null),6000);
+  },[]);
+  const aplicarDeshacer=()=>{if(deshacer){deshacer.restaurar();setDeshacer(null);clearTimeout(deshacerTimer.current);}};
 
   // Login: el ID del usuario autenticado es el dueño de los datos (cada uno ve SOLO lo suyo)
   const[authUid,setAuthUid]=useState(()=>auth.currentUser?auth.currentUser.uid:null);
@@ -1353,7 +1540,12 @@ function App(){
 
   const agrMov=m=>setMovs(p=>[...p,m]);
   const actualizarMov=m2=>setMovs(p=>p.map(m=>m.id===m2.id?m2:m));
-  const delMov=id=>{if(window.confirm('¿Eliminar este movimiento?'))setMovs(p=>p.filter(m=>m.id!==id));};
+  const delMov=id=>{
+    if(!window.confirm('¿Eliminar este movimiento?'))return;
+    const item=movs.find(m=>m.id===id);
+    setMovs(p=>p.filter(m=>m.id!==id));
+    if(item)mostrarDeshacer('Movimiento eliminado',()=>setMovs(p=>[...p,item]));
+  };
   const saveTarj=t=>setTarj(p=>p.find(x=>x.id===t.id)?p.map(x=>x.id===t.id?t:x):[...p,t]);
   const delTarj=id=>{if(!window.confirm('¿Eliminar tarjeta?'))return;const cq=movs.filter(m=>m.tipo==='cuota'&&m.tarjetaId===id&&!m.saldada&&(m.venc||[]).some(v=>dh(v)>=0));if(cq.length>0&&window.confirm('Esta tarjeta tiene '+cq.length+' compra(s) en cuotas pendientes. ¿Borrar también esas cuotas? (Cancelar = dejarlas en "Cuotas sin tarjeta")')){const ids=new Set(cq.map(c=>c.id));setMovs(p=>p.filter(m=>!ids.has(m.id)));}setTarj(p=>p.filter(t=>t.id!==id));};
   const saveFijo=f=>setFijos(p=>p.find(x=>x.id===f.id)?p.map(x=>x.id===f.id?f:x):[...p,f]);
@@ -1384,15 +1576,45 @@ function App(){
   const swipeRight=useCallback(()=>{if(mMov||mTarj||mFijo||mEditMov||showInforme)return;const nav=['dashboard','tarjetas','fijos','config'];const det=['ingresos','egresos','arqueo'];if(nav.includes(pant)){const i=nav.indexOf(pant);if(i>0)setPant(nav[i-1]);}else if(det.includes(pant)){setPant('dashboard');}},[pant,mMov,mTarj,mFijo,mEditMov,showInforme]);
   const{onTouchStart,onTouchEnd}=useSwipe(swipeLeft,swipeRight);
 
+  // Aviso local (una vez por día) de gastos fijos vencidos o por vencer en los próximos 2 días.
+  useEffect(()=>{
+    if(!uid||!rF||!rM)return;
+    if(typeof Notification==='undefined')return;
+    const hoyStr=hoy();
+    if(localStorage.getItem('ec_notif_fecha')===hoyStr)return;
+    const mesK=mk(hoyStr);
+    const[y,mo]=hoyStr.split('-');
+    const pend=(fijos||[]).filter(f=>f.activo&&!fijoPagado(f,movs,mesK)).map(f=>({f,d:dh(`${y}-${mo}-${pad(f.diaVenc)}`)})).filter(x=>x.d<=2);
+    if(pend.length===0)return;
+    localStorage.setItem('ec_notif_fecha',hoyStr);
+    const avisar=()=>{
+      const venc=pend.filter(x=>x.d<0).length;
+      const titulo=venc>0?`⚠️ Tenés ${venc} gasto${venc>1?'s':''} fijo${venc>1?'s':''} vencido${venc>1?'s':''}`:'📌 Gastos fijos por vencer';
+      const cuerpo=pend.map(x=>`${x.f.nombre} (${x.d<0?'venció hace '+(-x.d)+'d':x.d===0?'hoy':'en '+x.d+'d'})`).join(', ');
+      try{
+        if(navigator.serviceWorker&&navigator.serviceWorker.ready){
+          navigator.serviceWorker.ready.then(reg=>reg.showNotification(titulo,{body:cuerpo,tag:'ec-fijos'})).catch(()=>{try{new Notification(titulo,{body:cuerpo});}catch(e){}});
+        }else{
+          new Notification(titulo,{body:cuerpo});
+        }
+      }catch(e){}
+    };
+    if(Notification.permission==='granted')avisar();
+    else if(Notification.permission!=='denied')Notification.requestPermission().then(p=>{if(p==='granted')avisar();}).catch(()=>{});
+  },[uid,rF,rM,fijos,movs]);
+
   // ── PANTALLAS DE ESTADO ──
-  if(!(rM&&rT&&rF&&rP))return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}><div className="spin" style={{fontSize:32}}>☁️</div><div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Sincronizando datos...</div></div>;
+  if(!(rM&&rT&&rF&&rP))return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg)'}}>
+    <div className="spin" style={{width:44,height:44,borderRadius:12,background:'var(--primary)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--fh)',fontWeight:800,fontSize:'0.95rem',color:'#fff'}}>EC</div>
+    <div style={{fontFamily:'var(--fh)',fontSize:16,color:'var(--t2)'}}>Sincronizando datos...</div>
+  </div>;
 
   const render=()=>{switch(pant){
-    case'dashboard':return<Dashboard movs={movs} fijos={fijos} pagos={pagos} tarjetas={tarj} onNuevo={()=>abrirMov()} onVerIngresos={()=>setPant('ingresos')} onVerEgresos={()=>setPant('egresos')} onVerArqueo={()=>setPant('arqueo')}/>;
+    case'dashboard':return<Dashboard movs={movs} fijos={fijos} pagos={pagos} tarjetas={tarj} onNuevo={()=>abrirMov()} onVerIngresos={()=>setPant('ingresos')} onVerEgresos={()=>setPant('egresos')} onVerArqueo={()=>setPant('arqueo')} onVerFijos={()=>setPant('fijos')}/>;
     case'ingresos':return<DetalleIngresos movs={movs} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')} onEditar={m=>{setMovEdit(m);setMEditMov(true);}} onEliminar={delMov}/>;
     case'egresos':return<DetalleEgresos movs={movs} tarjetas={tarj} onNuevo={t=>{setTipoMov(t);setMMov(true);}} onVolver={()=>setPant('dashboard')} onEditar={m=>{setMovEdit(m);setMEditMov(true);}} onEliminar={delMov}/>;
     case'tarjetas':return<Tarjetas tarjetas={tarj} movs={movs} onAgregar={()=>{setETarj(null);setMTarj(true);}} onEditar={t=>{setETarj(t);setMTarj(true);}} onEliminar={delTarj} onSaldarCuota={id=>{if(window.confirm('¿Marcar esta cuota como saldada? Va a desaparecer de la deuda.'))setMovs(p=>p.map(m=>m.id===id?{...m,saldada:true}:m));}} onPagarCuota={c=>{if(!window.confirm('¿Confirmás el pago de una cuota de "'+(c.desc||'Cuota')+'" ('+fmt(c.montoCuota)+')? Se registra como gasto.'))return;setMovs(p=>[...p,{id:uid2(),tipo:'gasto',desc:(c.desc||'Cuota')+' (cuota)',monto:c.montoCuota,fecha:hoy(),cat:'Tarjeta',ent:c.ent||'personal',cuotaId:c.id}]);}} onEliminarCuota={delMov}/>;
-    case'fijos':return<GastosFijos fijos={fijos} movs={movs} setMovs={setMovs} onAgregar={()=>{setEFijo(null);setMFijo(true);}} onEditar={f=>{setEFijo(f);setMFijo(true);}} onEliminar={delFijo}/>;
+    case'fijos':return<GastosFijos fijos={fijos} movs={movs} setMovs={setMovs} onAgregar={()=>{setEFijo(null);setMFijo(true);}} onEditar={f=>{setEFijo(f);setMFijo(true);}} onEliminar={delFijo} mostrarDeshacer={mostrarDeshacer}/>;
     case'arqueo':return<Arqueo movs={movs} onVolver={()=>setPant('dashboard')}/>;
     case'config':return<Config user={getLicenciaEC()} onCerrarSesion={cerrarSesion} tema={tema} setTema={setTema} esc={esc} setEsc={setEsc} integracion={integracion} onExportar={exportarDatos} onImportar={importarDatos} onLimpiar={limpiarDatos} onInforme={()=>setShowInforme(true)} sincToken={sincToken} sincImportando={sincImportando} sincUltimaSync={sincUltimaSync} generarSincToken={generarSincToken} resetSincToken={resetSincToken} importarDesdeReparto={importarDesdeReparto}/>;
   }};
@@ -1401,11 +1623,17 @@ function App(){
   const fabAccion=pant==='tarjetas'?(()=>{setETarj(null);setMTarj(true);}):pant==='fijos'?(()=>{setEFijo(null);setMFijo(true);}):(()=>abrirMov());
   return<>
     <HeaderApp/>
-    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>{render()}</div>
-    {navPant.includes(pant)&&<Nav act={pant} go={setPant} onFab={fabAccion}/>}
-    {mMov&&<ModalMov tarjetas={tarj} onGuardar={agrMov} tipoInicial={tipoMov} catsCustom={catsCustom} onAddCat={agrCatCustom} onClose={()=>{setMMov(false);setTipoMov(null);}}/>}
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,position:'relative'}}>
+      {render()}
+      {navPant.includes(pant)&&<Nav act={pant} go={setPant} onFab={fabAccion}/>}
+      {deshacer&&<div style={{position:'absolute',left:14,right:14,bottom:navPant.includes(pant)?78:14,zIndex:300,background:'var(--card)',border:'1px solid var(--border)',borderRadius:14,padding:'10px 10px 10px 14px',display:'flex',alignItems:'center',gap:10,boxShadow:'0 8px 24px rgba(0,0,0,0.25)'}}>
+        <span style={{flex:1,fontSize:13,color:'var(--text)',fontWeight:500}}>{deshacer.msg}</span>
+        <button onClick={aplicarDeshacer} style={{padding:'7px 14px',borderRadius:10,border:'none',background:'var(--primary)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0}}>Deshacer</button>
+      </div>}
+    </div>
+    {mMov&&<ModalMov tarjetas={tarj} fijos={fijos} movs={movs} onGuardar={agrMov} tipoInicial={tipoMov} catsCustom={catsCustom} onAddCat={agrCatCustom} onClose={()=>{setMMov(false);setTipoMov(null);}}/>}
     {showInforme&&<ModalInforme movs={movs} onClose={()=>setShowInforme(false)}/>}
-    {mEditMov&&movEdit&&<ModalEditMov mov={movEdit} tarjetas={tarj} onGuardar={actualizarMov} catsCustom={catsCustom} onAddCat={agrCatCustom} onClose={()=>{setMEditMov(false);setMovEdit(null);}}/>}
+    {mEditMov&&movEdit&&<ModalEditMov mov={movEdit} tarjetas={tarj} fijos={fijos} movs={movs} onGuardar={actualizarMov} catsCustom={catsCustom} onAddCat={agrCatCustom} onClose={()=>{setMEditMov(false);setMovEdit(null);}}/>}
     {mTarj&&<ModalTarj tarjeta={eTarj} onGuardar={saveTarj} onClose={()=>{setMTarj(false);setETarj(null);}}/>}
     {mFijo&&<ModalFijo fijo={eFijo} onGuardar={saveFijo} onClose={()=>{setMFijo(false);setEFijo(null);}}/>}
   </>;
