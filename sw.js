@@ -1,7 +1,7 @@
 // Service Worker de Emma Control (comercial) — estrategia "red primero, caché como respaldo".
 // Bumpear este número cada vez que se sube una nueva versión de index.html:
 // fuerza a activar el SW nuevo enseguida (skipWaiting) sin esperar a que se cierren pestañas viejas.
-const CACHE_NAME = 'emma-control-comercial-v1';
+const CACHE_NAME = 'emma-control-comercial-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
