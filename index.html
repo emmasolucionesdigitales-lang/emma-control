@@ -351,7 +351,7 @@ const LogoSVG=()=><svg width="64" height="64" viewBox="0 0 76 76" style={{margin
 function getDeviceIdEC(){let id=localStorage.getItem('ec_device_id');if(!id){id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('ec_device_id',id);}return id;}
 
   // ── Email (via worker, la clave de Brevo vive solo en Cloudflare) ──
-  var MAIL_RELAY_URL = "https://emma-mail-worker.emmacontrol.workers.dev/relay";
+  var MAIL_RELAY_URL = "https://emma-mail-worker.emmasolucionesdigitales.workers.dev/relay";
   // ── Resumen diario ────────────────────────────────────────────────
   window.enviarResumenDiario_ec_licencia = async function(resumen) {
     // resumen: { fecha, totalIngresos, totalGastos, ganancia, detalle:[] }
